@@ -14,25 +14,79 @@ outdir = parser.get('Paths','outdir')
 
 class Cluster:
     """
-        Initializes the class instance with the given `snapno` and `clusno`.
-        
-        :param snapno: An integer representing the snapshot number.
-        :param clusno: An integer representing the cluster ID.
-        
-        :return: None
+    A class for the cluster data
+    
+    Attributes
+    ----------
+
+    clusID: int
+        cluster id at the snapshot
+    clus_mdm: float 
+        total dark matter mass of the cluster
+    clus_mgas: float
+        total gas mass of the cluster
+    clus_msink: float 
+        total sink particle mass of cluster 
+    clus_mstar: float 
+        total stellar mass of cluster
+    clus_mtot: float 
+        total mass of the cluster
+    clus_ngas: int
+        total number of gas particles in cluster 
+    clus_nsink: int
+        total number of sink particles in cluster
+    clus_nstar: int 
+        total number of star particles in cluster
+    clus_nsub: int 
+        total number of subhalos (galaxies) cluster
+    clus_pos: array of float
+        position of cluster in cMpc in the simulation
+    clus_vel: array of float
+        velocity of the cluster in km/s 
+    f: hdf5 file type
+        excess to the raw hdf5 file
+    snap: int 
+        snapshot number 
+
+    Methods
+    -------
+
+    get_all_parts: 
+        function to get all particles of a type in cluster
+    get_alldat_gal: 
+        get all data for a galaxy
+    get_galids: 
+        get all galaxy ids in a cluster
+    save_yt_dataset: 
+        get yt dataset for a cluster
+
     """
+
     def __init__(self,snapno,clusno):
+        """
+        Construct all necessary attributes for a cluster.
+
+        Parameters
+        ----------
+        snapno : int
+            snapshot number
+        clusno : int
+            cluster number
+        """
+
         self.snap=snapno
         self.clusID=clusno
 
         self.f = h5py.File(f"{outdir}clusters{self.snap}.hdf5", "r")
+
+        self.bcgid = self._BCG_ID()
 
         attrs = self.f[f'/{self.clusID}/'].attrs
 
         for att in attrs.keys():
             setattr(self, f"clus_{att}",attrs[att]) 
         
-    def BCG_ID(self):
+    def _BCG_ID(self):
         """
         Get the ID of the central galaxy and return it.
 
@@ -54,14 +108,24 @@ class Cluster:
     
     def get_galids(self): 
         """
-        Returns a list of galactic IDs associated with the current instance of the class.
-        :return: list of str
-        """
+        Returns a list of galaxy IDs from the `self.f` dictionary that corresponds to the cluster with ID `self.clusID`.
 
+        :return: A list of galaxy IDs.
+        """
         return list(self.f[f'/{self.clusID}'].keys())
 
     def get_alldat_gal(self,galist):
-            
+        """
+        This function takes in a list of galaxy IDs or a single galaxy ID and returns a Galaxy object or a list of Galaxy objects respectively. 
+        
+        Args:
+        - galist (list or int): A list of galaxy IDs or a single galaxy ID.
+        
+        Returns:
+        - outgal (list): A list of Galaxy objects if galist is a list.
+        - gal (Galaxy object): A Galaxy object if galist is an int.
+        """
+
         if isinstance(galist, list):
             
             outgal=[]
@@ -94,6 +158,15 @@ class Cluster:
             return gal
 
     def get_all_parts(self,partype):
+        """
+        This function returns an instance of the Galaxy class containing all parts of the specified type.
+        
+        Args:
+            partype (str): The type of part to retrieve.
+        
+        Returns:
+            Galaxy: An instance of the Galaxy class containing all parts of the specified type.
+        """
 
         gal = Galaxy(self.snap,self.clusID)
         galtmp = Galaxy(self.snap,self.clusID)
@@ -102,7 +175,6 @@ class Cluster:
 
                     galtmp=self.get_alldat_gal(galid)
 
-                    print('Processing galaxy',galid)
                     
                     vars=list(self.f[f'/{self.clusID}/{galid}/'].keys())
                     partvar = [var for var in vars if re.search(partype, var)]
@@ -121,10 +193,30 @@ class Cluster:
     
 
     def save_yt_dataset(self,clusID):
+        """
+        Saves the yt dataset of the BCG, ICM, and rest of the galaxies.
+        
+        Parameters:
+        -----------
+        clusID: int
+            Unique identifier of the cluster.
+        
+        
+        Returns:
+        --------
+        ds_all: yt dataset
+            Dataset containing all the particles.
+        ds_rest: yt dataset
+            Dataset containing the rest of the galaxies particles.
+        ds_bcg: yt dataset
+            Dataset containing the BCG particles.
+        ds_icm: yt dataset
+            Dataset containing the ICM particles.
+        """
 
         # get galaxies as BCG, ICM and rest of the galaxies
         #BCG
-        mid = self.BCG_ID()
+        mid = self._BCG_ID()
         bcg = self.get_alldat_gal(mid)
         # Rest
         galids=self.get_galids()
