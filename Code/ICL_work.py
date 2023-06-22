@@ -12,18 +12,19 @@ import glob
 
 # load up the parameter file
 parser = configparser.ConfigParser()
-parser.read('/home/ankitsingh/hr5_metallicity/params.ini')
-
+parser.read('/home/ankitsingh/hr5_metalicity/params.ini')
 
 # clusfile = parser.get('Paths','clusfile')
 Fofd = parser.get('Paths','Fofdir')
 outdir = parser.get('Paths','outdir')
 snapfiles = parser.get('Paths','snapfiles')
 
+print(snapfiles)
+
 def Make_hdf5(snapno):
 
     print(f'Processing snap no. {snapno}')
-    clusfile = f"/home/ankitsingh/hr5_metallicity/snapfiles/{snapno}.dat"
+    clusfile = f"{snapfiles}{snapno}.dat"
     clusters = pd.read_csv(clusfile,usecols=['HostHaloID'])
     clusters.sort_values('HostHaloID', inplace=True,ignore_index=True)
 
@@ -266,7 +267,6 @@ def Make_hdf5(snapno):
 # read all the snapshot dat files
 files = glob.glob(f'{snapfiles}*.dat')
 snap_files = sorted([int(os.path.basename(snap).split('.')[0]) for snap in files],reverse=True)
-
 
 progress_map(Make_hdf5,snap_files, chunk_size=10,n_cpu=5)
 #Define the number of threads to use
