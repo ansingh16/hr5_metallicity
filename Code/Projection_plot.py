@@ -82,7 +82,7 @@ def cluster_projection(cluslast,clusID):
 def make_fits(comp,proj,ds,width,res,kind):
 
     prjpd_fits = yt.FITSParticleProjection(
-            ds, proj, (comp, "particle_mass"),density=True, deposition="cic",length_unit='Mpc',image_res=[res,res])
+            ds, proj, (comp, "particle_mass"),density=True, deposition="mass",length_unit='Mpc',image_res=[res,res])
 
     prjpd_fits.change_image_name("particle_mass", f"{kind}_{comp}_density_{proj}")
 

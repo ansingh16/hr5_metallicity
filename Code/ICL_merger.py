@@ -2,13 +2,14 @@ import configparser
 import h5py
 import pandas as pd 
 import os 
+from parallelbar import progress_map
 
 # load up the parameter file
 parser = configparser.ConfigParser()
-parser.read('./params.ini')
+parser.read('../params.ini')
 
 # Reading the data locations
-Timedat = pd.read_csv('./Time_data.csv')
+Timedat = parser.get('Paths','hr5outs')
 output = parser.get('Paths','outdir')
 clus_half = pd.read_csv(f'{output}/halfmass.csv')
 # LBT_sort = clus_half.sort_values(by=['LBT']).groupby(['LBT'])
@@ -19,36 +20,29 @@ Fofd = parser.get('Paths','Fofdir')
 clusters = pd.read_csv(clusfile)
 
 
+def Tree(clus):
 
-i=0
-for clus in clusters['HostHaloID'].unique():
+        
+        MAHfile = pd.read_csv(f"{output}/{clus}_MAH.csv")
+        
+        MAHfile = MAHfile.loc[MAHfile['ClusMass(Msun)']>=1.0e12]
 
-                Red = clus_half.loc[clus_half['HostHaloID']==clus,'Redshift'].values[0]
-                half_snap = Timedat.loc[Timedat['Redshift']==Red,'Snapshot'].values[0]
-
-                MAHfile = pd.read_csv(f"{output}/{clus}_MAH.csv")
-
-                beyond_half = MAHfile[MAHfile['snap']>half_snap]
-
-                for snap,haloid in zip(beyond_half['snap'].values,beyond_half['HostHaloID'].values):
-                        print(snap,haloid)
-                        if os.path.exists(f"./{snap}.dat"):
-                                with open(f"./{snap}.dat",'a') as f:
-                                        data = f.write(f"{haloid}\n")
-                                        f.close()
-                        else:
-                                with open(f"./{snap}.dat",'w') as f:
-                                        f.write("HostHaloID\n")
-                                        f.write(f"{haloid}\n")
-                                        f.close()
+        for snap,haloid in zip(MAHfile['snap'].values,MAHfile['HostHaloID'].values):
                 
-                i=i+1
+                if os.path.exists(f"../snapfiles/{snap}.dat"):
+                        with open(f"../snapfiles/{snap}.dat",'a') as f:
+                                data = f.write(f"{haloid},{clus}\n")
+                                f.close()
+                else:
+                        with open(f"../snapfiles/{snap}.dat",'w') as f:
+                                f.write("HostHaloID,LastClus\n")
+                                f.write(f"{haloid},{clus}\n")
+                                f.close()
 
-print(i)
 
-# check if file exists append the data else create a new file
-# if os.path.exists(f"{output}/Total_data.csv"):
-#     Total_data.to_csv(f"{output}/Total_data.csv",mode='a',header=False)
-# else: 
-#     Total_data.to_csv(f"{output}/Total_data.csv",header=True)
+cluslist = clusters['HostHaloID'].unique()
+
+progress_map(Tree,cluslist, chunk_size=1,n_cpu=4)
+
+        
 

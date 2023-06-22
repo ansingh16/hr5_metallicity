@@ -10,8 +10,8 @@ parser.read('../params.ini')
 
 
 outdir = parser.get('Paths','outdir')
-
-
+h0 = float(parser.get('Setting','h0'))
+print(h0)
 class Cluster:
     """
     A class for the cluster data
@@ -94,15 +94,18 @@ class Cluster:
         """
         # get the ID of central galaxy
         # get total mass of first galaxy
-        mid=next(iter(self.f[f'/{self.clusID}/'].keys()))
+        gallis = self.get_galids()
+        gallis.remove('ICL')
+        mid=-1
 
 
-        mostmass=self.f[f'/{self.clusID}/{mid}/'].attrs['mtot']
-
-        for gal in self.f[f'/{self.clusID}/'].keys():
+        mostmass=0
+        #print("starting",mostmass)
+        for gal in gallis:
             if self.f[f'/{self.clusID}/{gal}'].attrs['mtot']>mostmass:
                     mostmass = self.f[f'/{self.clusID}/{gal}'].attrs['mtot']
                     mid = gal 
+            #print(mid,mostmass)
 
         return mid 
     
@@ -130,7 +133,7 @@ class Cluster:
             
             outgal=[]
             for galid in galist:
-                print(f"Processing galaxy {galid}")
+                print(f"\rProcessing galaxy {galid}", end='')
                 gal = Galaxy(self.snap,self.clusID,galid)
                 
                 for part in ['gas','star','dm']:
@@ -144,7 +147,7 @@ class Cluster:
                 outgal.append(gal)
             return outgal
         else:
-            print(f"Processing galaxy {galist}")
+            print(f"\rProcessing galaxy {galist}", end='')
             gal = Galaxy(self.snap,self.clusID,galist)
             
             for part in ['gas','star','dm']:
@@ -252,7 +255,7 @@ class Cluster:
                 for part in ['gas','star','dm']:
                         data_dict[j][(f"{part}","particle_mass")] = getattr(glx,f'{part}_mass')[:]
                         for i,dir in enumerate(['x','y','z']):
-                            data_dict[j][(f"{part}","particle_position_{dir}")] = getattr(glx,f'{part}_pos_com')[:,i]
+                            data_dict[j][(f"{part}",f"particle_position_{dir}")] = getattr(glx,f'{part}_pos_com')[:,i]
                         
                         if part=='star':
                             for var in var_s:
@@ -264,7 +267,7 @@ class Cluster:
                             for var in var_d:
                                 data_dict[j][(f"{part}",f"{var}")] = getattr(glx,f'{part}_{var}')[:]
             else:
-                
+                # it is rest of galaxies and all galaxies list
                 for part in ['gas','star','dm']:
                     data_dict[j][(f"{part}","particle_mass")] = np.concatenate([getattr(gal,f'{part}_mass') for gal in glx],axis=0)
                     
@@ -281,7 +284,6 @@ class Cluster:
                             for var in var_d:
                                 data_dict[j][(f"{part}",f"{var}")]= np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
             
-        
         
         
         # get width that can encompass all particles
@@ -301,6 +303,8 @@ class Cluster:
                 width=width+0.2
                 pass
         
+
+
         ds_rest = yt.load_particles(data_rest, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
         ds_bcg = yt.load_particles(data_bcg, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
         ds_icm = yt.load_particles(data_icm, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
@@ -312,8 +316,97 @@ class Cluster:
 
 # Class for handling galaxy data
 class Galaxy(Cluster):
+    """
+    A class for galaxy data
+
+    dm_mass: float arr(gal_ndm)
+        array of dark matter mass 
+    dm_pos: float arr(gal_ndm,3)
+        array of dark matter position 
+    dm_pos_com: float arr(gal_ndm,3)
+        array of dark matter position in center of mass 
+    dm_vel: float arr(gal_ndm,3)
+        array of dark matter velocity 
+    galID: int
+        galaxy ID
+    gal_mdm: float
+        total dark matter mass of galaxy
+    gal_mgas: float
+        total gas mass of galaxy
+    gal_msink: float
+        total sink mass of galaxy
+    gal_mstar: float
+        total stellar mass of galaxy
+    gal_mtot: float
+        total mass of galaxy
+    gal_ngas: int
+        total number of gas particles in galaxy
+    gal_nsink: int
+        total number of sink particles in galaxy
+    gal_nstar: int
+        total number of stellar particles in galaxy
+    gal_pos: float arr(3)
+        galaxy position 
+    gal_vel: float arr(3)
+        array of gas particle velocity 
+    gas_fe: float arr(gal_ngas)
+        array of fe 
+    gas_h: float arr(gal_ngas)
+        array of h 
+    gas_mass: float arr(gal_gas)
+        array of gas particle mass 
+    gas_o: float arr(gal_ngas)
+        array of o 
+    gas_pos: float arr(gal_ngas,3)
+        array of gas particle position 
+    gas_pos_com: float arr(gal_ngas,3)
+        array of gas particle position in center of mass 
+    gas_t: float arr(gal_ngas)
+        array of gas temperature 
+    gas_vel: float arr(gal_ngas,3)
+        array of gas particle velocity 
+    gas_z: float arr(gal_ngas)
+        array of gas metallicity 
+    rcom_dm:float:arr(gal_ndm)
+        array of dark matter particle distances from origin in COM frame
+    rcom_gas: float arr(gal_ngas)
+        array of gas particle distances from origin in COM frame
+    rcom_star: float arr(gal_nstar)
+        array of stellar particle distances from origin in COM frame
+    star_mass: float arr(gal_nstar)
+        array of stellar particle mass
+    star_pos: float arr(gal_nstar,3)
+        array of stellar particle position size
+    star_pos_com: float arr(gal_nstar,3)
+        array of stellar particle position in COM frame 
+    star_vel: float arr(gal_nstar,3)
+        array of stellar particle velocity 
+    star_z: float arr(gal_nstar)
+        array of stellar particle metallicty 
+
+    """
     def __init__(self,snap,clusID,galid=None):
             super().__init__(snap,clusID)
+
+            """
+            Parameters
+            ----------
+            snap: int
+                snapshot
+            clusID: int
+                cluster ID
+            galid: int
+                galaxy ID
+            """
+            
+            
+            if galid==None:
+                pass
+            else:
+                attrs = self.f[f'/{self.clusID}/{galid}'].attrs
+
+                for att in attrs.keys():
+                    setattr(self, f"gal_{att}",attrs[att]) 
 
             self.galID     = galid
             self.star_pos  = np.empty((0, 3))
@@ -332,16 +425,6 @@ class Galaxy(Cluster):
             self.gas_t     = np.empty(0)
             self.gas_z     = np.empty(0)
             
-            
-            if galid==None:
-                pass
-            else:
-                attrs = self.f[f'/{self.clusID}/{galid}'].attrs
-
-                for att in attrs.keys():
-                    setattr(self, f"gal_{att}",attrs[att]) 
-
-
     @property
     def star_pos(self):
         return self._star_pos
@@ -373,7 +456,14 @@ class Galaxy(Cluster):
         
 
     def _update(self,part):
-
+        """
+        Update the positions of the particles and calculate the center of mass of the selected particle type.
+        
+        :param part: A string representing the particle type to update. It can be 'star', 'gas', or 'dm'.
+        
+        :return: None
+        """
+        
         if part=='star':
             self.star_pos_com = self.star_pos-self.clus_pos
             self.rcom_star = np.linalg.norm(self.star_pos_com,axis=1)
@@ -381,7 +471,7 @@ class Galaxy(Cluster):
         elif part=='gas':
             self.gas_pos_com = self.gas_pos-self.clus_pos
             self.rcom_gas = np.linalg.norm(self.gas_pos_com,axis=1)
-            
+        
         elif part=='dm':
             self.dm_pos_com = self.dm_pos-self.clus_pos
             self.rcom_dm = np.linalg.norm(self.dm_pos_com,axis=1)

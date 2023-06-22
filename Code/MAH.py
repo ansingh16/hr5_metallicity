@@ -1,18 +1,11 @@
-from telnetlib import GA
 import numpy as np
-from scipy import interpolate,linalg
-import numpy as np
-from struct import unpack
 import pandas as pd 
-import h5py
 from scipy.io import FortranFile
 import matplotlib.pyplot as plt 
 from os.path import isfile, join
 from os import listdir
-from multiprocessing import Pool
 import csv
-import tqdm 
-
+from parallelbar import progress_map
 
 # plt.style.use('/home/ankitsingh/HR5_AGN/paper_style.mplstyle')
 
@@ -33,8 +26,16 @@ def read_snapfile(snapno):
     return snapi
 
 
-def Traverse(idin=0,clusID=0,fm=0):
+def Traverse(clusID=0):
 
+        cluster = snaplast.loc[snaplast['HostHaloID'].to_numpy()==clusID]
+
+        # get total mass of first galaxy
+                
+        idin=cluster.loc[cluster['Mstar(Msun)'].to_numpy()==cluster['Mstar(Msun)'].max(),'ID'].values[0]
+                    
+        fm = cluster['HostMtot(Msun)'].to_numpy()[0]
+                    
         # idin is the ID of the main galaxy in the cluster        
 
         with open(f'{output}/{clusID}_MAH.csv','w') as fout:
@@ -44,7 +45,7 @@ def Traverse(idin=0,clusID=0,fm=0):
             # get the number of snapshot
             snapnum = [file.split('_')[3].split('.parquet')[0] for file in hr5files]
             
-
+            
             iddec=idin
             i=0
 
@@ -125,8 +126,10 @@ def Traverse(idin=0,clusID=0,fm=0):
                 
         halfred = hr5outs.loc[hr5outs['LBT']==thalf,'Redshift'].values
 
+        
         if halfred.size == 0:
             halfred=[0]
+
         return halfred  
 
 
@@ -134,64 +137,45 @@ def Traverse(idin=0,clusID=0,fm=0):
 
 # load up the parameter file
 parser = configparser.ConfigParser()
-parser.read('params.ini')
-
+parser.read('../params.ini')
 
 
 Fofd = parser.get('Paths','Fofdir')
 output = parser.get('Paths','outdir')
+clusfile=parser.get('Paths','clusfile')
+hr5cat=parser.get('Paths','galaxycats')
+snapno = int(parser.get('Setting','snapno'))
+hr5time=parser.get('Paths','hr5outs')
 
-
-
-red = float(parser.get('Setting','redshift'))
-critmass = float(parser.get('Setting','clusmass'))
-
-
-# Get snapshot corresponding to redshift
-hr5outs = pd.read_csv('./Time_data.dat',dtype={'Snapshot':str,'Redshift':float,\
-                    'LBT':float,'dx':float})
-snapno = hr5outs['Snapshot'].to_numpy()[hr5outs['Redshift'].to_numpy()==red][0]
-
-
-hr5cat = '/scratch/ankitsingh/Galaxy_catalogs/'
-outfolder = hr5cat
+#get list of catalogs
 
 hr5files = sorted([join(hr5cat,f) for f in listdir(hr5cat) if (isfile(join(hr5cat,f))& f.endswith('.parquet')) ],reverse=True)
 
-clusfile='groups5e13.csv'
 
 clusters = pd.read_csv(clusfile)
 
-with h5py.File(f"{output}clusters296.hdf5", "r") as f:
+
+snaplast = read_snapfile(snapno)
+
+
+# Get snapshot corresponding to redshift
+hr5outs = pd.read_csv(hr5time,dtype={'Snapshot':str,'Redshift':float,\
+                    'LBT':float,'dx':float})
+
+
+
+hr5files = sorted([join(hr5cat,f) for f in listdir(hr5cat) if (isfile(join(hr5cat,f))& f.endswith('.parquet')) ],reverse=True)
+
+
+
+
     
-    #with open(f"{output}halfmass.txt", 'w') as hfile:
+with open(f"{output}halfmass.txt", 'w') as hfile:
         
+        hfile.write(f"HostHaloID,Redshift\n")
         cluslist = clusters['HostHaloID'].to_list()
         
-        #hfile.write(f"HostHaloID,Redshift\n")
+        hred = progress_map(Traverse,cluslist, chunk_size=1,n_cpu=8)
+        for cl, rr in zip(cluslist, hred):
 
-        for clusID in tqdm.tqdm(cluslist):
-
-            
-            # get total mass of first galaxy
-            mid=next(iter(f[f'/{clusID}/'].keys()))
-
-            mostmass=f[f'/{clusID}/{mid}/'].attrs['mtot']
-
-
-            for gal in f[f'/{clusID}/'].keys():
-                            if f[f'/{clusID}/{gal}'].attrs['mtot']>mostmass:
-                                    mostmass = f[f'/{clusID}/{gal}'].attrs['mtot']
-                                    mid = gal 
-            
-
-            finalmass = clusters['HostMtot(Msun)'].to_numpy()[clusters['HostHaloID'].to_numpy()==clusID][0]
-            
-
-
-            hred = Traverse(int(mid),clusID,finalmass)
-
-            #hfile.write(f"{clusID},{hred[0]}\n")
-
-
-        
+            hfile.write(f"{cl},{rr}\n")
