@@ -21,31 +21,24 @@ import glob
 
 import configparser
 
-# load up the parameter file
-parser = configparser.ConfigParser()
-parser.read('params.ini')
-
-
-outdir = parser.get('Paths','outdir')
-clusfile = parser.get('Paths','clusfile')
 
 
 # load up the parameter file
 parser = configparser.ConfigParser()
-parser.read('params.ini')
+parser.read('/home/ankitsingh/hr5_metalicity/params.ini')
 
-
-# setting paths containg HR5 directories
-Fofd = parser.get('Paths','Fofdir')
 output = parser.get('Paths','outdir')
-clusmer = pd.read_csv('../isomm_time.txt')
-
+snapfiles = parser.get('Paths','snapfiles')
 
 # read all the snapshot dat files
-files = glob.glob('*.dat')
-snaps_files = [snap.split('.')[0] for snap in files]
-snaps_files = [snap for snap in snaps_files if int(snap)>=int(min(snaps_files))]
+files =  [filename for filename in os.listdir(snapfiles) if os.path.isfile(os.path.join(snapfiles, filename))]
 
+
+snaps = [os.path.splitext(file)[0] for file in files]
+
+# snaps.remove('296')
+
+snaps.sort(reverse=True)
 # Function for saving png corresponding to each cluster
 # at each snapshot
 
@@ -54,13 +47,13 @@ snaps_files = [snap for snap in snaps_files if int(snap)>=int(min(snaps_files))]
 def make_fits(comp,proj,ds,width,res,kind):
 
     prjpd_fits = yt.FITSParticleProjection(
-            ds, proj, (comp, "particle_mass"),density=True, deposition="cic",length_unit='Mpc',image_res=[res,res])
+            ds, proj, (comp, "particle_mass"), deposition="ngp",length_unit='Mpc',image_res=[res,res])
 
-    prjpd_fits.change_image_name("particle_mass", f"{kind}_{comp}_density_{proj}")
+    prjpd_fits.change_image_name("particle_mass", f"{kind}_{comp}_mass_{proj}")
 
-    prjpd_fits.update_header(f"{kind}_{comp}_density_{proj}", "scale", f"{width}/{res} Mpc/pixel")
+    prjpd_fits.update_header(f"{kind}_{comp}_mass_{proj}", "scale", f"{width}/{res} Mpc/pixel")
 
-    prjpd_fits.set_unit(f"{kind}_{comp}_density_{proj}", "Msun/kpc**2")
+    prjpd_fits.set_unit(f"{kind}_{comp}_mass_{proj}", "Msun")
 
     return prjpd_fits
 
@@ -74,13 +67,13 @@ def savefits( snap,clusID,cluslast):
     # is Msun/kpc**2
 
 
-    hid = pd.read_csv(f'./{snap}.dat')
+    hid = pd.read_csv(f'{snapfiles}{snap}.dat')
     
     if clusID in hid.to_numpy():
                                 
             # read snap hdf5 file containing the data
             
-            f = h5py.File(f"{outdir}clusters{snap}.hdf5", "r")
+            f = h5py.File(f"{output}clusters{snap}.hdf5", "r")
             print(f"For cluster = {cluslast}, Reading {snap} and Halo = {clusID}")
                                 
 
@@ -133,15 +126,16 @@ def savefits( snap,clusID,cluslast):
 
 
             # get total mass of first galaxy
-            mid=next(iter(f[f'/{clusID}/'].keys()))
+            mid=-1
 
 
-            mostmass=f[f'/{clusID}/{mid}/'].attrs['mtot']
+            mostmass=0
 
             for gal in f[f'/{clusID}/'].keys():
-                if f[f'/{clusID}/{gal}'].attrs['mtot']>mostmass:
-                        mostmass = f[f'/{clusID}/{gal}'].attrs['mtot']
+                if f[f'/{clusID}/{gal}'].attrs['mstar']>mostmass:
+                        mostmass = f[f'/{clusID}/{gal}'].attrs['mstar']
                         mid = gal 
+        
 
             # mid contains the ID of the BCG
 
@@ -349,20 +343,21 @@ def savefits( snap,clusID,cluslast):
 
             # combined fits for all particles
             prj_fits_comb = yt.FITSImageData.from_images(all_img)
-            prj_fits_comb.writeto(f'{outdir}/{cluslast}/{snap}_{clusID}.fits', overwrite=True)
+            prj_fits_comb.writeto(f'{output}/{cluslast}/{snap}_{clusID}.fits', overwrite=True)
 
-    
-# Main code
 
+
+#Main code
+clusters = pd.read_csv(f'{snapfiles}296.dat')
 # loop over clusters of interest
-for clus in tqdm.tqdm(clusmer['HostHaloID'].unique()):
+for clus in tqdm.tqdm(clusters['HostHaloID']):
 
 
-                
+            
             # read mass accretion files
             MAHfile = pd.read_csv(f"{output}/{clus}_MAH.csv")
             # # get snaps that come after half mass accumulation
-            MAHfile = MAHfile[MAHfile['snap']>=int(min(snaps_files))]
+            MAHfile = MAHfile[MAHfile['snap']>=int(min(snaps))]
 
             # # last snapshot is already done in previous analysis
             # beyond_half = beyond_half[beyond_half['snap'] != 296]
@@ -379,4 +374,3 @@ for clus in tqdm.tqdm(clusmer['HostHaloID'].unique()):
             with multiprocessing.Pool(8) as pool:
                 pool.starmap(savefits,args)        
 
-                    

@@ -8,32 +8,29 @@ import h5py
 from scipy.io import FortranFile
 import matplotlib.pyplot as plt 
 # plt.style.use('/home/ankitsingh/HR5_AGN/paper_style.mplstyle')
-
+import tqdm 
+from parallelbar import progress_map
+import multiprocessing
 import configparser
 import os
-
 # load up the parameter file
 parser = configparser.ConfigParser()
-parser.read('params.ini')
+parser.read('/home/ankitsingh/hr5_metalicity/params.ini')
 
-
+# clusfile = parser.get('Paths','clusfile')
 Fofd = parser.get('Paths','Fofdir')
-output = parser.get('Paths','outdir')
+outdir = parser.get('Paths','outdir')
+snapfiles = parser.get('Paths','snapfiles')
 
-
-red = float(parser.get('Setting','redshift'))
-critmass = float(parser.get('Setting','clusmass'))
-
-
-# Get snapshot corresponding to redshift
-hr5outs = pd.read_csv('./Time_data.csv',dtype={'Snapshot':str,'Redshift':float,\
-                    'LBT':float,'dx':float})
+h0=float(parser.get('Setting','h0'))
 
 # get snapshots which are to be analysed
 
 import glob
 
-files = glob.glob('*.dat')
+files =  [filename for filename in os.listdir(snapfiles) if os.path.isfile(os.path.join(snapfiles, filename))]
+
+
 
 
 snaps = [os.path.splitext(file)[0] for file in files]
@@ -42,18 +39,31 @@ snaps = [os.path.splitext(file)[0] for file in files]
 
 snaps.sort(reverse=True)
 
+print(snaps)
 
-for snapno in snaps:
+# snaps=['99','34','35']
 
-    clusfile = f"{snapno}.dat"
+
+
+def Back(snapno):
+
+    clusfile = f"{snapfiles}{snapno}.dat"
     clusters = pd.read_csv(clusfile,usecols=['HostHaloID'])
     clusters.sort_values('HostHaloID', inplace=True)
 
-    with h5py.File(f"{output}clusters{snapno}.hdf5", "a") as f:
+    print(outdir,snapno)
+    with h5py.File(f"{outdir}clusters{snapno}.hdf5", "a") as f:
 
+        if 'status' in f:
+            del f['status']
+            f.create_dataset('status',dtype=np.int32,data=1)
+        else:
+            f.create_dataset('status',dtype=np.int32,data=1)
+                    
         # Open Galaxy find data files
         with open(f'{Fofd}/FoF.{snapno:0>5}/background_ptl.{snapno:0>5}', mode='rb') as file: # b -> binary
 
+            
             hline=0
             sline=0
             kkk=0
@@ -62,7 +72,7 @@ for snapno in snaps:
                 
                 fof = file.read(112)
                 if not fof or (kkk>clusters.shape[0]-1):
-                    print("Done!! Smell the success.. :)",kkk,sline)
+                    #print(f"Done snap {snapno} with clusters: {kkk}")
                     break
                 else:
                     #print(snapno,hline,kkk)
@@ -70,7 +80,8 @@ for snapno in snaps:
                     # Check if the cluster is of interest
                     if (kkk<=clusters.shape[0]-1) & \
                         (hline == clusters['HostHaloID'].iloc[kkk]):
-                                    
+                        
+                        # print(hline)
                         # Read fof halo
                         data2 = unpack('@6i11d',fof)
                                         
@@ -154,30 +165,36 @@ for snapno in snaps:
                                     massstar[j] = tstar['mass']
                                     zstar[j] = tstar['zp']
                                     
-                                                
-                        # Check if the dataset exists, delete it
-                        for dat in ['posstar','posdm','posgas','velstar',\
-                            'veldm','velgas','massstar','massdm','massgas',\
-                                'tgas','zgas','fegas','hgas','ogas','zstar']:
+                        # if f'{hline}/ICL/' in f:
+                        #         del f[f'{hline}/ICL/'] 
 
-                            if f'{hline}/ICL/{dat}' in f:
-                                del f[f'{hline}/ICL/{dat}']                        
+                        # # Check if the dataset exists, delete it
+                        # for dat in ['posstar','posdm','posgas','velstar',\
+                        #     'veldm','velgas','massstar','massdm','massgas',\
+                        #         'tgas','zgas','fegas','hgas','ogas','zstar']:
+
+                            
+                        #     try: 
+                        #         if f'{hline}/ICL/{dat}' in f:
+                        #             del f[f'{hline}/ICL/{dat}']                 
+                        #     except:
+                        #         pass
 
                         # write positions of stars in subhalo
-                        f.create_dataset(f'{hline}/ICL/posstar',data=posstar)
-                        f.create_dataset(f'{hline}/ICL/posdm',data=posdm)
-                        f.create_dataset(f'{hline}/ICL/posgas',data=posg)
+                        f.create_dataset(f'{hline}/ICL/posstar',data=posstar/h0)
+                        f.create_dataset(f'{hline}/ICL/posdm',data=posdm/h0)
+                        f.create_dataset(f'{hline}/ICL/posgas',data=posg/h0)
 
                         # write positions of stars in subhalo
                         f.create_dataset(f'{hline}/ICL/velstar',data=velstar)
                         f.create_dataset(f'{hline}/ICL/veldm',data=veldm)
                         f.create_dataset(f'{hline}/ICL/velgas',data=velg)
-                                                
+                                                    
                         # Write mass
 
-                        f.create_dataset(f'{hline}/ICL/massstar',data=massstar)
-                        f.create_dataset(f'{hline}/ICL/massdm',data=massdm)
-                        f.create_dataset(f'{hline}/ICL/massgas',data=massg)
+                        f.create_dataset(f'{hline}/ICL/massstar',data=massstar/h0)
+                        f.create_dataset(f'{hline}/ICL/massdm',data=massdm/h0)
+                        f.create_dataset(f'{hline}/ICL/massgas',data=massg/h0)
 
 
                         # write temperature
@@ -192,16 +209,20 @@ for snapno in snaps:
 
                         # write attributes   
                         icl = f[f'/{hline}/ICL/']
-                        for par in ['ndm','ngas','nsink','nstar','mtot',\
-                            'mdm','mgas','msink','mstar','pos','vel']:
-
+                        for par in ['ndm','ngas','nsink','nstar','vel']:
+                            
                             icl.attrs[par] = tsub[par]
+                        for par in ['mtot','mdm','mgas','msink','mstar','pos']:
+                            try:
+                                icl.attrs[par] = tsub[par]/h0 
+                            except:
+                                icl.attrs[par] = np.array(tsub[par])/h0 
 
                         kkk=kkk+1
 
-                        print(f"Cluster found!! {kkk} with id {hline} at {snapno}")
+                        # print(f"Cluster found!! {kkk} with id {hline} at {snapno}")
 
-                        
+
 
 
                     else:
@@ -234,4 +255,6 @@ for snapno in snaps:
 
                     hline=hline+1
                         
-                                
+
+for snap in tqdm.tqdm(snaps):
+  Back(snap)

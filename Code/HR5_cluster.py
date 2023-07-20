@@ -102,8 +102,8 @@ class Cluster:
         mostmass=0
         #print("starting",mostmass)
         for gal in gallis:
-            if self.f[f'/{self.clusID}/{gal}'].attrs['mtot']>mostmass:
-                    mostmass = self.f[f'/{self.clusID}/{gal}'].attrs['mtot']
+            if self.f[f'/{self.clusID}/{gal}'].attrs['mstar']>mostmass:
+                    mostmass = self.f[f'/{self.clusID}/{gal}'].attrs['mstar']
                     mid = gal 
             #print(mid,mostmass)
 
@@ -147,6 +147,7 @@ class Cluster:
                 outgal.append(gal)
             return outgal
         else:
+            # here galist is an int
             print(f"\rProcessing galaxy {galist}", end='')
             gal = Galaxy(self.snap,self.clusID,galist)
             
@@ -229,6 +230,7 @@ class Cluster:
         #ICM
         icm = self.get_alldat_gal('ICL')
         
+        
         #get variable list
         varbls=list(vars(icm))
         varbls = [x for x in varbls if re.search('_',x)]
@@ -286,30 +288,27 @@ class Cluster:
             
         
         
+        print(data_all[('gas','particle_mass')].shape,data_all[('gas','t')].shape)
         # get width that can encompass all particles
         res=1024
-        width=0.2
+        width=2
         result = None
-        while result is None:
-            try:
-                
-                # connect
-                bbox = np.array([[-width,width], [-width, width], [-width, width]])
+        bbox = np.array([[-width,width], [-width, width], [-width, width]])
 
-                ds_all = yt.load_particles(data_all, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
-                result = yt.ParticleProjectionPlot(ds_all,'x',("star","particle_mass"))
+        ds_all = yt.load_particles(data_all, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+        result = yt.ParticleProjectionPlot(ds_all,'x',("star","particle_mass"))
                 
-            except:
-                width=width+0.2
-                pass
+            # except:
+            #     width=width+0.2
+            #     pass
         
 
 
-        ds_rest = yt.load_particles(data_rest, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
-        ds_bcg = yt.load_particles(data_bcg, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
-        ds_icm = yt.load_particles(data_icm, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+        # ds_rest = yt.load_particles(data_rest, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+        # ds_bcg = yt.load_particles(data_bcg, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+        # ds_icm = yt.load_particles(data_icm, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
 
-        return ds_all,ds_rest,ds_bcg,ds_icm
+        # return ds_all,ds_rest,ds_bcg,ds_icm
 
 
 

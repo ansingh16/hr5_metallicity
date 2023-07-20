@@ -5,10 +5,11 @@ import h5py
 from scipy.io import FortranFile
 # plt.style.use('/home/ankitsingh/HR5_AGN/paper_style.mplstyle')
 import configparser
-from parallelbar import progress_map
+# from parallelbar import progress_map
 import os 
-import glob
-
+# import glob
+# import random
+import sys 
 
 # load up the parameter file
 parser = configparser.ConfigParser()
@@ -19,18 +20,29 @@ Fofd = parser.get('Paths','Fofdir')
 outdir = parser.get('Paths','outdir')
 snapfiles = parser.get('Paths','snapfiles')
 
-print(snapfiles)
+h0=float(parser.get('Setting','h0'))
+
+# import random
+# import time
 
 def Make_hdf5(snapno):
 
     print(f'Processing snap no. {snapno}')
+
+
     clusfile = f"{snapfiles}{snapno}.dat"
     clusters = pd.read_csv(clusfile,usecols=['HostHaloID'])
     clusters.sort_values('HostHaloID', inplace=True,ignore_index=True)
 
     with h5py.File(f"{outdir}/clusters{snapno}.hdf5", "w") as f:
                 
-                
+                if 'status' in f:
+                    del f['status']
+                    f.create_dataset('status',dtype=np.int32,data=0)
+                else:
+                    f.create_dataset('status',dtype=np.int32,data=0)
+                    
+                    
                 # Open Galaxy find data files
                 with open(f'{Fofd}FoF.{snapno:0>5}/GALFIND.DATA.{snapno:0>5}', mode='rb') as file: # b -> binary
 
@@ -42,7 +54,7 @@ def Make_hdf5(snapno):
                         
                         fof = file.read(112)
                         if not fof or (kkk>clusters.shape[0]-1):
-                            print("Done!! Smell the success.. :)",kkk,hline)
+                            print(f"Done!! snap={snapno},total clus={kkk},endded={hline}")
                             break
                         else:
                             #print(hline,kkk,clusters.loc[kkk,'HostHaloID'])
@@ -146,9 +158,9 @@ def Make_hdf5(snapno):
                                                     
 
                                                     # write positions of stars in subhalo
-                                                    f.create_dataset(f'{hline}/{sline}/posstar',data=posstar)
-                                                    f.create_dataset(f'{hline}/{sline}/posdm',data=posdm)
-                                                    f.create_dataset(f'{hline}/{sline}/posgas',data=posg)
+                                                    f.create_dataset(f'{hline}/{sline}/posstar',data=posstar/h0)
+                                                    f.create_dataset(f'{hline}/{sline}/posdm',data=posdm/h0)
+                                                    f.create_dataset(f'{hline}/{sline}/posgas',data=posg/h0)
 
                                                     # write positions of stars in subhalo
                                                     f.create_dataset(f'{hline}/{sline}/velstar',data=velstar)
@@ -157,9 +169,9 @@ def Make_hdf5(snapno):
                                                     
                                                     # Write mass
 
-                                                    f.create_dataset(f'{hline}/{sline}/massstar',data=massstar)
-                                                    f.create_dataset(f'{hline}/{sline}/massdm',data=massdm)
-                                                    f.create_dataset(f'{hline}/{sline}/massgas',data=massg)
+                                                    f.create_dataset(f'{hline}/{sline}/massstar',data=massstar/h0)
+                                                    f.create_dataset(f'{hline}/{sline}/massdm',data=massdm/h0)
+                                                    f.create_dataset(f'{hline}/{sline}/massgas',data=massg/h0)
 
 
                                                     # write temperature
@@ -176,21 +188,33 @@ def Make_hdf5(snapno):
                                                     # get cluster group
 
                                                     clus = f[f'/{hline}/']
-                                                    for par in ['nsub','nstar','nsink','ngas','mtot','mdm',\
-                                                        'mgas','msink','mstar','pos','vel']:
+                                                    for par in ['nsub','nstar','nsink','vel']:
 
                                                         clus.attrs[par] = thalo[par]
+                                                    
+                                                    for par in ['mtot','mdm',\
+                                                        'mgas','msink','mstar','pos']:
+
+                                                        try:
+                                                            clus.attrs[par] = thalo[par]/h0
+                                                        except:
+                                                            clus.attrs[par] = np.array(thalo[par])/h0
 
                                                     gal = f[f'/{hline}/{sline}']
-                                                    for par in ['nstar','nsink','ngas','mtot','mdm',\
-                                                        'mgas','msink','mstar','pos','vel']:
-
+                                                    for par in ['nstar','nsink','ngas','vel']:
                                                         gal.attrs[par] = tsub[par]
 
-                                            
+                                                    for par in ['mtot','mdm',\
+                                                        'mgas','msink','mstar','pos']:
+
+                                                        try:
+                                                            gal.attrs[par] = tsub[par]/h0
+                                                        except:
+                                                            gal.attrs[par] = np.array(tsub[par])/h0
+                                                        
                                                     sline = sline + 1
                                             
-                                            print(f"snap={snapno} ,Cluster found!! no.={kkk} ID={hline},{clusters['HostHaloID'].iloc[kkk]}")
+                                            # print(f"snap={snapno} ,Cluster found!! no.={kkk} ID={hline},{clusters['HostHaloID'].iloc[kkk]}")
 
                                                     
                                             kkk=kkk+1
@@ -237,36 +261,40 @@ def Make_hdf5(snapno):
 
                             hline = hline + 1
                                             
-
+                status = 1
 
     #Checking if all the clusters were found and stored in the hdf5 file
     out = f"{outdir}clusters{snapno}.hdf5"
     if os.path.exists(out):
-                print(out)
+                #print(out)
                 with h5py.File(out, 'r') as file:
                     
                     keys = list(file.keys())
+                    keys.remove('status')
                     keys = [int(clus) for clus in keys]
-                    clusfile = f"{snapno}.dat"
+                    clusfile = f"{snapfiles}{snapno}.dat"
 
-                    clusters = np.genfromtxt(clusfile,skip_header=1,dtype=int)
+                    clusters = pd.read_csv(clusfile)
 
-                    clusters = clusters.tolist()
+                    clusters = clusters['HostHaloID'].tolist()
 
                     if isinstance(clusters, int):
                         clusters = [clusters]
                     # check the clusters that have been processed already
                     diff2 = set(clusters) - set(keys)
-                    
                     assert len(diff2) == 0, "The following clusters were not found in the hdf5 file: {}".format(diff2)
                         
 
 
+snapno = int(sys.argv[1])
 
+Make_hdf5(snapno)
 
-# read all the snapshot dat files
-files = glob.glob(f'{snapfiles}*.dat')
-snap_files = sorted([int(os.path.basename(snap).split('.')[0]) for snap in files],reverse=True)
+# # read all the snapshot dat files
+# files = glob.glob(f'{snapfiles}*.dat')
+# snap_files = sorted([int(os.path.basename(snap).split('.')[0]) for snap in files],reverse=True)
 
-progress_map(Make_hdf5,snap_files, chunk_size=10,n_cpu=5)
+#random.shuffle(snap_files)
+
+#progress_map(Make_hdf5,snap_files,n_cpu=5)
 #Define the number of threads to use
