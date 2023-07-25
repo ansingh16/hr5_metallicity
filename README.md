@@ -4,7 +4,7 @@ The main code for analysis is present in **Code** directory. The jupyter file **
 
 Before starting the analysis following steps are recommended:
 
-- Install [miniconda environment](https://docs.conda.io/en/latest/miniconda.html) and create a python environment using the file icl_env.txt
+- Install [miniconda package management system](https://docs.conda.io/en/latest/miniconda.html) and create a python environment using the file icl_env.txt
 
         
         conda create --name hr5_metal --file icl_env.txt
