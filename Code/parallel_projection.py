@@ -350,27 +350,28 @@ def savefits( snap,clusID,cluslast):
 #Main code
 clusters = pd.read_csv(f'{snapfiles}296.dat')
 # loop over clusters of interest
-for clus in tqdm.tqdm(clusters['HostHaloID']):
+# for clus in tqdm.tqdm([1664541]):#clusters['HostHaloID']):
 
 
             
-            # read mass accretion files
-            MAHfile = pd.read_csv(f"{output}/{clus}_MAH.csv")
-            # # get snaps that come after half mass accumulation
-            MAHfile = MAHfile[MAHfile['snap']>=int(min(snaps))]
+#             # read mass accretion files
+#             MAHfile = pd.read_csv(f"{output}/{clus}_MAH.csv")
+#             # # get snaps that come after half mass accumulation
+#             MAHfile = MAHfile[MAHfile['snap']>=int(min(snaps))]
 
-            # # last snapshot is already done in previous analysis
-            # beyond_half = beyond_half[beyond_half['snap'] != 296]
+#             # # last snapshot is already done in previous analysis
+#             # beyond_half = beyond_half[beyond_half['snap'] != 296]
             
-            if not os.path.exists(f"{output}/{clus}"):
-                os.mkdir(f"{output}/{clus}")
+#             if not os.path.exists(f"{output}/{clus}"):
+#                 os.mkdir(f"{output}/{clus}")
             
-            # Loop over the progenitors and make fits 
-            args= [(snap,haloid,clus) for snap,haloid in zip(MAHfile['snap'].values,MAHfile['HostHaloID'].values)]
+#             # Loop over the progenitors and make fits 
+#             args= [(snap,haloid,clus) for snap,haloid in zip(MAHfile['snap'].values,MAHfile['HostHaloID'].values)]
                         
-                        
-                        
-            # save fits
-            with multiprocessing.Pool(8) as pool:
-                pool.starmap(savefits,args)        
+#             print(args)            
+            
+#             # save fits
+#             with multiprocessing.Pool(8) as pool:
+#                 pool.starmap(savefits,args)        
 
+savefits(296,1664541,1664541)
