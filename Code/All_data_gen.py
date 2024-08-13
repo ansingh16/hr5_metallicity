@@ -7,15 +7,13 @@ from scipy.io import FortranFile
 import configparser
 # from parallelbar import progress_map
 import os 
-
-# import glob
-# import random
 import sys 
-import glob
-import tqdm 
+
+import concurrent.futures
+
 # load up the parameter file
 parser = configparser.ConfigParser()
-parser.read('/home/ankitsingh/hr5_metalicity/params.ini')
+parser.read('/home/ankitsingh/hr5_metallicity/params.ini')
 
 # clusfile = parser.get('Paths','clusfile')
 Fofd = parser.get('Paths','Fofdir')
@@ -404,7 +402,7 @@ def Make_hdf5(snapno):
                                 # Check if the cluster is of interest
                                 if clusters['HostHaloID'].iloc[kkk]==hline:
                                 
-                                                
+                                                print(f"found cluster: {hline} in {snapno}")
                                                 
                                                 read_icl(fout,hline,fof_icl,file_back)
                                                 sline = read_fof(fout,sline,hline,fof,file_fof)
@@ -466,3 +464,26 @@ def Make_hdf5(snapno):
 snapno = sys.argv[1]
 
 Make_hdf5(snapno)
+
+
+# def process_snapshot(snapno):
+#     Make_hdf5(snapno)
+#     return snapno
+
+# files =  [filename for filename in os.listdir(snapfiles) if os.path.isfile(os.path.join(snapfiles, filename))]
+
+
+# snapshot_numbers = [105]#[os.path.splitext(file)[0] for file in files]
+
+
+# # Output file path
+# output_file_path = '../done_processing.txt'
+
+# # Parallel execution using ProcessPoolExecutor
+# with concurrent.futures.ThreadPoolExecutor(5) as executor:
+#     results = list(executor.map(process_snapshot, snapshot_numbers))
+
+# # Writing the processed snapshot numbers to the output file
+# with open(output_file_path, 'a') as out:
+#     for snapno in results:
+#         out.write(f'{snapno}\n')

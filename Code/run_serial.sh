@@ -25,7 +25,7 @@ while [[ $numfiles -le tasks_in_total ]]; do
     echo $snapdat
     snap=$(basename "${snapdat%.*}")
     # Replace this with your processing code or command
-    python ~/hr5_metalicity/Code/All_data_gen.py $snap &
+    time python ~/hr5_metallicity/Code/All_data_gen.py $snap &
     numfiles=$((numfiles+1))
     show_progress $numfiles $tasks_in_total
     echo " "

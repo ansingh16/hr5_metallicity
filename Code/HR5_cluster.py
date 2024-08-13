@@ -3,6 +3,8 @@ import numpy as np
 import configparser
 import re 
 import yt 
+import astropy.units as u
+import pandas as pd 
 
 # load up the parameter file
 parser = configparser.ConfigParser()
@@ -11,7 +13,11 @@ parser.read('../params.ini')
 
 outdir = parser.get('Paths','outdir')
 h0 = float(parser.get('Setting','h0'))
-print(h0)
+
+
+
+
+
 class Cluster:
     """
     A class for the cluster data
@@ -288,27 +294,35 @@ class Cluster:
             
         
         
-        print(data_all[('gas','particle_mass')].shape,data_all[('gas','t')].shape)
+        # print(data_all[('gas','particle_mass')].shape,data_all[('gas','t')].shape)
         # get width that can encompass all particles
         res=1024
         width=2
         result = None
+
+        while result is None:
+            try:
+                    
+                    bbox = np.array([[-width,width], [-width, width], [-width, width]])
+                    ds_all = yt.load_particles(data_all, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+                    result = yt.ParticleProjectionPlot(ds_all,'x',("star","particle_mass"))
+            except:        
+                    width=width+0.2
+        
+        # print(result, width)
+        
         bbox = np.array([[-width,width], [-width, width], [-width, width]])
 
         ds_all = yt.load_particles(data_all, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
         result = yt.ParticleProjectionPlot(ds_all,'x',("star","particle_mass"))
                 
-            # except:
-            #     width=width+0.2
-            #     pass
         
 
+        ds_rest = yt.load_particles(data_rest, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+        ds_bcg = yt.load_particles(data_bcg, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+        ds_icm = yt.load_particles(data_icm, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
 
-        # ds_rest = yt.load_particles(data_rest, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
-        # ds_bcg = yt.load_particles(data_bcg, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
-        # ds_icm = yt.load_particles(data_icm, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
-
-        # return ds_all,ds_rest,ds_bcg,ds_icm
+        return ds_all,ds_rest,ds_bcg,ds_icm
 
 
 
@@ -382,7 +396,7 @@ class Galaxy(Cluster):
         array of stellar particle velocity 
     star_z: float arr(gal_nstar)
         array of stellar particle metallicty 
-
+    
     """
     def __init__(self,snap,clusID,galid=None):
             super().__init__(snap,clusID)
@@ -424,6 +438,7 @@ class Galaxy(Cluster):
             self.gas_t     = np.empty(0)
             self.gas_z     = np.empty(0)
             
+            
     @property
     def star_pos(self):
         return self._star_pos
@@ -432,7 +447,7 @@ class Galaxy(Cluster):
     def star_pos(self, value):
         self._star_pos = value
         self._update('star')
-    
+        
     @property
     def gas_pos(self):
         return self._gas_pos
@@ -464,14 +479,149 @@ class Galaxy(Cluster):
         """
         
         if part=='star':
-            self.star_pos_com = self.star_pos-self.clus_pos
+            self.star_pos_com = self.star_pos-self.gal_pos
             self.rcom_star = np.linalg.norm(self.star_pos_com,axis=1)
+
             
         elif part=='gas':
-            self.gas_pos_com = self.gas_pos-self.clus_pos
+            self.gas_pos_com = self.gas_pos-self.gal_pos
             self.rcom_gas = np.linalg.norm(self.gas_pos_com,axis=1)
         
         elif part=='dm':
-            self.dm_pos_com = self.dm_pos-self.clus_pos
+            self.dm_pos_com = self.dm_pos-self.gal_pos
             self.rcom_dm = np.linalg.norm(self.dm_pos_com,axis=1)
-            
+
+
+    def _half_mass_radius(self, particle_type):
+        # Determine which attributes to use based on the particle type
+        if particle_type == 'star':
+            pos = self.star_pos[:]
+            mass = self.star_mass[:]
+            total_mass = self.gal_mstar
+        elif particle_type == 'gas':
+            pos = self.gas_pos[:]
+            mass = self.gas_mass[:]
+            total_mass = self.gal_mgas
+        elif particle_type == 'dm':
+            pos = self.dm_pos[:]
+            mass = self.dm_mass[:]
+            total_mass = self.gal_mdm
+        else:
+            raise ValueError("Invalid particle type. Choose from 'star', 'gas', or 'dm'.")
+
+        # Calculate the center of mass (COM) for the chosen particle type
+        com = np.average(pos, weights=mass, axis=0)
+
+        # Calculate the distance from COM for each particle
+        pos_gal = pos - com
+        r_sc = np.linalg.norm(pos_gal, axis=1)
+
+        # Store the r_sc in the class as an attribute based on particle type
+        if particle_type == 'star':
+            self.r_star_sc = r_sc
+        elif particle_type == 'gas':
+            self.r_gas_sc = r_sc
+        elif particle_type == 'dm':
+            self.r_dm_sc = r_sc
+
+        # Create a DataFrame with distances and masses
+        gal_data = pd.DataFrame({'rcom': r_sc, 'mass': mass})
+
+        # Sort the DataFrame by the distance from the center
+        df_sorted = gal_data.sort_values(by='rcom').reset_index(drop=True)
+
+        # Calculate the cumulative mass
+        df_sorted['cumulative_mass'] = df_sorted['mass'].cumsum()
+
+        # Find the half-mass value
+        half_mass = total_mass / 2
+
+        # Find the index where the cumulative mass first reaches or exceeds the half mass
+        half_mass_index = df_sorted[df_sorted['cumulative_mass'] >= half_mass].index[0]
+
+        # Set the half-mass radius
+        half_mass_radius = df_sorted.loc[half_mass_index, 'rcom']
+
+        return half_mass_radius
+
+
+
+    def get_yt_dataset(self):
+
+        icm = self.get_alldat_gal(self.galID)
+        #get variable list
+        varbls=list(vars(icm))
+        varbls = [x for x in varbls if re.search('_',x)]
+        starvar = [var.replace('star_','') for var in varbls if re.search('star_',var)and (var[0]!=r'_')]
+        gasvar = [var.replace('gas_','') for var in varbls if re.search('gas_',var)and (var[0]!=r'_')]
+        dmvar = [var.replace('dm_','') for var in varbls if re.search('dm_',var)and (var[0]!=r'_')]
+        
+        #These variables are to be added to the dataset apart from pos,vel,mass
+        var_s =set(starvar)-set(['pos_com','mass','vel'])
+        var_g =set(gasvar)-set(['pos_com','mass','vel'])
+        var_d = set(dmvar)-set(['pos_com','mass','vel'])
+        
+        glx=[self.get_alldat_gal(self.galID)]
+        data_dict = {} 
+        # it is rest of galaxies and all galaxies list
+        for part in ['gas','star','dm']:
+            data_dict[(f"{part}","particle_mass")] = np.concatenate([getattr(gal,f'{part}_mass') for gal in glx],axis=0)
+                    
+            for i,dir in enumerate(['x','y','z']):
+                    data_dict[(f"{part}",f"particle_position_{dir}")] = np.concatenate([getattr(gal,f'{part}_pos_com') for gal in glx],axis=0)[:,i]
+                        
+            if part=='star':
+                for var in var_s:
+                    data_dict[(f"{part}",f"{var}")] = np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
+            if part=='gas':
+                for var in var_g:
+                    data_dict[(f"{part}",f"{var}")]= np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
+            if part=='dm':
+                for var in var_d:
+                    data_dict[(f"{part}",f"{var}")]= np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
+        
+
+        data_all = data_dict
+        if self.galID == self.bcgid:
+            width = 1
+        else: 
+            width = 0.2
+        result = None
+        while result is None:
+            try:
+                    
+                    bbox = np.array([[-width,width], [-width, width], [-width, width]])
+                    ds_all = yt.load_particles(data_all, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+                    result = yt.ParticleProjectionPlot(ds_all,'x',("star","particle_mass"))
+            except:        
+                    width=width+0.2
+        
+        
+        bbox = np.array([[-width,width], [-width, width], [-width, width]])
+
+        ds_all = yt.load_particles(data_all, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+        result = yt.ParticleProjectionPlot(ds_all,'x',("star","particle_mass"))
+
+        return ds_all
+    
+
+    def get_metal_slope(self,r_rhalf_max=2,r_bin_width=0.1,var='star_z'):
+         
+        half_mass_radius = self._half_mass_radius('star')
+
+        
+        gal_data = pd.DataFrame({'rcom':self.r_star_sc,'star_z':self.star_z[:]/0.02})
+        gal_data['r_rhalf'] = gal_data['rcom']/half_mass_radius
+
+        bins = np.arange(0,r_rhalf_max,r_bin_width)
+        labels = [int(i) for i in range(len(bins)-1)]
+        gal_data['binned'] = pd.cut(gal_data['r_rhalf'], bins,labels=labels,duplicates='drop')
+
+        Q1 = []
+        Q2 = []
+        j=0
+        for lab in labels:
+            Q1.append(gal_data.loc[gal_data['binned']==lab,'r_rhalf'].median())
+            Q2.append(gal_data.loc[gal_data['binned']==lab,'star_z'].median())   
+
+        return Q1,Q2
