@@ -7,15 +7,13 @@ from scipy.io import FortranFile
 import configparser
 # from parallelbar import progress_map
 import os 
-
-# import glob
-# import random
 import sys 
-import glob
-import tqdm 
+
+import concurrent.futures
+
 # load up the parameter file
 parser = configparser.ConfigParser()
-parser.read('/home/ankitsingh/hr5_metalicity/params.ini')
+parser.read('/home/ankitsingh/hr5_metallicity/params.ini')
 
 # clusfile = parser.get('Paths','clusfile')
 Fofd = parser.get('Paths','Fofdir')
@@ -104,7 +102,11 @@ def read_icl(fout,hline,fof_icl,file_back):
             massstar[j] = tstar['mass']
             zstar[j] = tstar['zp']
                                     
+    # check if subhalo is exists
+    if f'{hline}/ICL/' in fout:
 
+        # delete the old subhalo
+        del fout[f'{hline}/ICL']
 
     # write positions of stars in subhalo
     fout.create_dataset(f'{hline}/ICL/posstar',data=posstar/h0)
@@ -259,8 +261,14 @@ def read_fof(fout,sline,hline,fof,file_fof):
                 massstar[j] = tstar['mass']
                 zstar[j] = tstar['zp']
                                         
-                                                    
-                                                    
+
+        # check if subhalo is exists
+        if f'{hline}/{sline}' in fout:
+
+            # delete the old subhalo
+            del fout[f'{hline}/{sline}']
+
+                         
 
         # write positions of stars in subhalo
         fout.create_dataset(f'{hline}/{sline}/posstar',data=posstar/h0)
@@ -362,12 +370,15 @@ def skip_fof(sline,fof,file_fof):
 # import time
 
 
-def Make_hdf5(snapno,clusterid):
+def Make_hdf5(snapno,clusters):
 
-    print(f'Processing snap no. {snapno}')
+    print(f'Processing snap no. {snapno} and {clusters} clusters')
 
-    clusters = np.array([clusterid]) 
-    
+
+    # clusfile = f"{snapfiles}{snapno}.dat"
+    # clusters = pd.read_csv(clusfile,usecols=['HostHaloID'])
+    # clusters.sort_values('HostHaloID', inplace=True,ignore_index=True)
+
     with h5py.File(f"{outdir}/clusters{snapno}.hdf5", "a") as fout:
                 
                 if 'status' in fout:
@@ -401,7 +412,7 @@ def Make_hdf5(snapno,clusterid):
                                 # Check if the cluster is of interest
                                 if clusters[kkk]==hline:
                                 
-                                                
+                                                print(f"found cluster: {hline} in {snapno}")
                                                 
                                                 read_icl(fout,hline,fof_icl,file_back)
                                                 sline = read_fof(fout,sline,hline,fof,file_fof)
@@ -461,6 +472,28 @@ def Make_hdf5(snapno,clusterid):
 
 
 snapno = 296
-clusterid=1664541
+clusters = np.array([7265698])
+Make_hdf5(snapno,clusters)
 
-Make_hdf5(snapno,clusterid)
+
+# def process_snapshot(snapno):
+#     Make_hdf5(snapno)
+#     return snapno
+
+# files =  [filename for filename in os.listdir(snapfiles) if os.path.isfile(os.path.join(snapfiles, filename))]
+
+
+# snapshot_numbers = [105]#[os.path.splitext(file)[0] for file in files]
+
+
+# # Output file path
+# output_file_path = '../done_processing.txt'
+
+# # Parallel execution using ProcessPoolExecutor
+# with concurrent.futures.ThreadPoolExecutor(5) as executor:
+#     results = list(executor.map(process_snapshot, snapshot_numbers))
+
+# # Writing the processed snapshot numbers to the output file
+# with open(output_file_path, 'a') as out:
+#     for snapno in results:
+#         out.write(f'{snapno}\n')

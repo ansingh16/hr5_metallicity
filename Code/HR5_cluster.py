@@ -5,6 +5,8 @@ import re
 import yt 
 import astropy.units as u
 import pandas as pd 
+from scipy import stats
+from scipy.optimize import curve_fit
 
 # load up the parameter file
 parser = configparser.ConfigParser()
@@ -16,6 +18,35 @@ h0 = float(parser.get('Setting','h0'))
 
 
 
+def sersic_profile(r, I0, R0, n):
+    """ Sérsic profile function. """
+    return I0 * np.exp(-2 * (np.abs(r / R0) ** (1/np.abs(n)) - 1))
+
+def fit_sersic_profile(r, I):
+    """ Fit a Sérsic profile to the data and return the parameters. """
+    # Initial guess for parameters
+    initial_guess = [np.max(I), np.median(r[r > 0]), 2.0]  # Start with a slightly larger n
+    
+    # Set bounds to ensure R0 and n stay positive
+    bounds = (0, [np.inf, np.inf, 10])  # Example: allow n to vary up to 10
+    
+    try:
+        # Fit the Sérsic profile to the data
+        popt, _ = curve_fit(sersic_profile, r, I, p0=initial_guess, bounds=bounds, maxfev=10000)
+        I0, R0, n = popt
+        # print(f"Fitted Sérsic index (n): {n:.2f}")
+        return I0, R0, n
+    except RuntimeError as e:
+        # print(f"Optimal parameters not found: {e}")
+        return None, None, None
+    
+
+def project_3d_to_2d(x, y, z):
+    """ Project 3D particle data to 2D by summing along z-axis. """
+    r = np.sqrt(x**2 + y**2)
+    hist, edges = np.histogram(r, bins=100, range=(0, np.max(r)))
+    bin_centers = (edges[:-1] + edges[1:]) / 2
+    return bin_centers, hist
 
 
 class Cluster:
@@ -101,7 +132,7 @@ class Cluster:
         # get the ID of central galaxy
         # get total mass of first galaxy
         gallis = self.get_galids()
-        gallis.remove('ICL')
+        
         mid=-1
 
 
@@ -121,7 +152,21 @@ class Cluster:
 
         :return: A list of galaxy IDs.
         """
-        return list(self.f[f'/{self.clusID}'].keys())
+
+        galids = list(self.f[f'/{self.clusID}/'].keys())
+        
+        
+        galids.remove('ICL')
+
+        # get low resolution galaxies
+        low_res = []
+        for gal in galids:
+            if self.f[f'/{self.clusID}/{gal}/'].attrs['mstar']<2.0e9:
+               low_res.append(gal)
+        # remove low resolution galaxies
+        galids = [gal for gal in galids if gal not in low_res]
+
+        return galids
 
     def get_alldat_gal(self,galist):
         """
@@ -139,7 +184,7 @@ class Cluster:
             
             outgal=[]
             for galid in galist:
-                print(f"\rProcessing galaxy {galid}", end='')
+                # print(f"\rProcessing galaxy {galid}", end='')
                 gal = Galaxy(self.snap,self.clusID,galid)
                 
                 for part in ['gas','star','dm']:
@@ -154,7 +199,7 @@ class Cluster:
             return outgal
         else:
             # here galist is an int
-            print(f"\rProcessing galaxy {galist}", end='')
+            # print(f"\rProcessing galaxy {galist}", end='')
             gal = Galaxy(self.snap,self.clusID,galist)
             
             for part in ['gas','star','dm']:
@@ -491,6 +536,77 @@ class Galaxy(Cluster):
             self.dm_pos_com = self.dm_pos-self.gal_pos
             self.rcom_dm = np.linalg.norm(self.dm_pos_com,axis=1)
 
+    # function to get yt dataset for a single galaxy
+    def get_yt_dataset(self):
+        """
+        Returns a yt dataset for a single galaxy.
+        """
+
+        icm = self.get_alldat_gal(self.galID)
+        #get variable list
+        varbls=list(vars(icm))
+        varbls = [x for x in varbls if re.search('_',x)]
+        starvar = [var.replace('star_','') for var in varbls if re.search('star_',var)and (var[0]!=r'_')]
+        gasvar = [var.replace('gas_','') for var in varbls if re.search('gas_',var)and (var[0]!=r'_')]
+        dmvar = [var.replace('dm_','') for var in varbls if re.search('dm_',var)and (var[0]!=r'_')]
+        
+        #These variables are to be added to the dataset apart from pos,vel,mass
+        var_s =set(starvar)-set(['pos_com','mass','vel'])
+        var_g =set(gasvar)-set(['pos_com','mass','vel'])
+        var_d = set(dmvar)-set(['pos_com','mass','vel'])
+        
+        # the id of the galaxy in a list
+        glx=[self.get_alldat_gal(self.galID)]
+        
+        # dictionary to fill the data
+        data_dict = {} 
+        
+        # Loop over the particle types and fill the data dictionary
+        for part in ['gas','star','dm']:
+            data_dict[(f"{part}","particle_mass")] = np.concatenate([getattr(gal,f'{part}_mass') for gal in glx],axis=0)
+            
+            # loop over the directions for postions
+            for i,dir in enumerate(['x','y','z']):
+                    data_dict[(f"{part}",f"particle_position_{dir}")] = np.concatenate([getattr(gal,f'{part}_pos_com') for gal in glx],axis=0)[:,i]
+                        
+            if part=='star':
+                for var in var_s:
+                    data_dict[(f"{part}",f"{var}")] = np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
+            if part=='gas':
+                for var in var_g:
+                    data_dict[(f"{part}",f"{var}")]= np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
+            if part=='dm':
+                for var in var_d:
+                    data_dict[(f"{part}",f"{var}")]= np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
+        
+
+        data_all = data_dict
+        
+        # if the galaxy is the BCG, increase the width of the plot
+        if self.galID == self.bcgid:
+            width = 1
+        else: 
+            width = 0.2
+        result = None
+
+        # Loop to encompass all the particles in the domain
+        while result is None:
+            try:
+                    
+                    bbox = np.array([[-width,width], [-width, width], [-width, width]])
+                    ds_all = yt.load_particles(data_all, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+                    result = yt.ParticleProjectionPlot(ds_all,'x',("star","particle_mass"))
+            except:        
+                    width=width+0.2
+        
+        # bounding box final
+        bbox = np.array([[-width,width], [-width, width], [-width, width]])
+
+        # load the dataset and return
+        ds_all = yt.load_particles(data_all, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+        
+        return ds_all
+    
 
     def _half_mass_radius(self, particle_type):
         # Determine which attributes to use based on the particle type
@@ -515,6 +631,7 @@ class Galaxy(Cluster):
         # Calculate the distance from COM for each particle
         pos_gal = pos - com
         r_sc = np.linalg.norm(pos_gal, axis=1)
+
 
         # Store the r_sc in the class as an attribute based on particle type
         if particle_type == 'star':
@@ -546,82 +663,71 @@ class Galaxy(Cluster):
 
 
 
-    def get_yt_dataset(self):
-
-        icm = self.get_alldat_gal(self.galID)
-        #get variable list
-        varbls=list(vars(icm))
-        varbls = [x for x in varbls if re.search('_',x)]
-        starvar = [var.replace('star_','') for var in varbls if re.search('star_',var)and (var[0]!=r'_')]
-        gasvar = [var.replace('gas_','') for var in varbls if re.search('gas_',var)and (var[0]!=r'_')]
-        dmvar = [var.replace('dm_','') for var in varbls if re.search('dm_',var)and (var[0]!=r'_')]
-        
-        #These variables are to be added to the dataset apart from pos,vel,mass
-        var_s =set(starvar)-set(['pos_com','mass','vel'])
-        var_g =set(gasvar)-set(['pos_com','mass','vel'])
-        var_d = set(dmvar)-set(['pos_com','mass','vel'])
-        
-        glx=[self.get_alldat_gal(self.galID)]
-        data_dict = {} 
-        # it is rest of galaxies and all galaxies list
-        for part in ['gas','star','dm']:
-            data_dict[(f"{part}","particle_mass")] = np.concatenate([getattr(gal,f'{part}_mass') for gal in glx],axis=0)
-                    
-            for i,dir in enumerate(['x','y','z']):
-                    data_dict[(f"{part}",f"particle_position_{dir}")] = np.concatenate([getattr(gal,f'{part}_pos_com') for gal in glx],axis=0)[:,i]
-                        
-            if part=='star':
-                for var in var_s:
-                    data_dict[(f"{part}",f"{var}")] = np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
-            if part=='gas':
-                for var in var_g:
-                    data_dict[(f"{part}",f"{var}")]= np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
-            if part=='dm':
-                for var in var_d:
-                    data_dict[(f"{part}",f"{var}")]= np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
-        
-
-        data_all = data_dict
-        if self.galID == self.bcgid:
-            width = 1
-        else: 
-            width = 0.2
-        result = None
-        while result is None:
-            try:
-                    
-                    bbox = np.array([[-width,width], [-width, width], [-width, width]])
-                    ds_all = yt.load_particles(data_all, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
-                    result = yt.ParticleProjectionPlot(ds_all,'x',("star","particle_mass"))
-            except:        
-                    width=width+0.2
-        
-        
-        bbox = np.array([[-width,width], [-width, width], [-width, width]])
-
-        ds_all = yt.load_particles(data_all, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
-        result = yt.ParticleProjectionPlot(ds_all,'x',("star","particle_mass"))
-
-        return ds_all
     
+    
+    # function for metallicity gradient
+    def get_metal_slope(self, r_rhalf_max=2, r_bin_width=0.1, var='star'):
+        """
+        Parameters
+        ----------
+        r_rhalf_max: float
+            Maximum radius of the bin
+        r_bin_width: float
+            Width of the bin
+        var: str
+            The variable to be used can be either 'star' or 'gas'
+        """
 
-    def get_metal_slope(self,r_rhalf_max=2,r_bin_width=0.1,var='star_z'):
-         
-        half_mass_radius = self._half_mass_radius('star')
+        # Get half-mass radius and select metallicity and distance arrays based on particle type
+        half_mass_radius = self._half_mass_radius(var)
+        if var == 'star':
+            met, dist = self.star_z[:], self.r_star_sc
+        elif var == 'gas':
+            met, dist = self.gas_z[:], self.r_gas_sc
+        else:
+            raise ValueError("Invalid particle type. Choose from 'star', 'gas', or 'dm'.")
 
+        # Normalize metallicity and calculate r/r_half
+        gal_data = pd.DataFrame({
+            'r_rhalf': dist / half_mass_radius,
+            var: met / 0.02
+        })
+
+        # Bin the data
+        bins = np.arange(0, r_rhalf_max, r_bin_width)
+        gal_data['binned'] = pd.cut(gal_data['r_rhalf'], bins, labels=False)
+
+        # Calculate median r/r_half and metallicity for each bin
+        binned_data = gal_data.groupby('binned').agg({'r_rhalf': 'median', var: 'median'}).dropna()
+
+        # Perform linear regression
+        slope, _, _, _, std_err = stats.linregress(binned_data['r_rhalf'], binned_data[var])
+
+        return binned_data['r_rhalf'].values, binned_data[var].values, slope, std_err
+
+
+
+    def get_morphology(self):
+       
         
-        gal_data = pd.DataFrame({'rcom':self.r_star_sc,'star_z':self.star_z[:]/0.02})
-        gal_data['r_rhalf'] = gal_data['rcom']/half_mass_radius
+        if self.star_mass[:].shape[0]>0 and self.galID !='ICL':
+            # Calculate the center of mass (COM) for the chosen particle type
+            com = np.average(self.star_pos, weights=self.star_mass, axis=0)
 
-        bins = np.arange(0,r_rhalf_max,r_bin_width)
-        labels = [int(i) for i in range(len(bins)-1)]
-        gal_data['binned'] = pd.cut(gal_data['r_rhalf'], bins,labels=labels,duplicates='drop')
+            # Calculate the distance from COM for each particle
+            pos_gal = self.star_pos[:] - com
+            
+            
 
-        Q1 = []
-        Q2 = []
-        j=0
-        for lab in labels:
-            Q1.append(gal_data.loc[gal_data['binned']==lab,'r_rhalf'].median())
-            Q2.append(gal_data.loc[gal_data['binned']==lab,'star_z'].median())   
+            x = pos_gal[:, 0]
+            y = pos_gal[:, 1]
+            z = pos_gal[:, 2]
 
-        return Q1,Q2
+            r, intensity = project_3d_to_2d(x, y, z)
+            
+
+            # Fit the Sérsic profile
+            I0, R0, n_ser = fit_sersic_profile(r, intensity)
+
+            # Print the Sérsic index
+            return n_ser

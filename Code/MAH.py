@@ -179,3 +179,4 @@ with open(f"{output}halfmass.txt", 'w') as hfile:
         for cl, rr in zip(cluslist, hred):
 
             hfile.write(f"{cl},{rr}\n")
+yo
