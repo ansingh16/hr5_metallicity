@@ -674,3 +674,38 @@ class Galaxy(Cluster):
 
         return binned_data['r_rhalf'].values, binned_data[var].values, slope, std_err
 
+
+# function for metallicity gradient
+    def get_feh_slope(self, r_rhalf_max=2, r_bin_width=0.1):
+        """
+        Parameters
+        ----------
+        r_rhalf_max: float
+            Maximum radius of the bin
+        r_bin_width: float
+            Width of the bin
+        """
+
+        # Get half-mass radius and select metallicity and distance arrays based on particle type
+        half_mass_radius = self._half_mass_radius('gas')
+        
+        feh, dist = self.gas_fe[:]/self.gas_h[:], self.r_gas_sc
+        
+        # Normalize metallicity and calculate r/r_half
+        gal_data = pd.DataFrame({
+            'r_rhalf': dist / half_mass_radius,
+            'feh': np.log10(feh) + 4.5
+        })
+
+        # Bin the data
+        bins = np.arange(0, r_rhalf_max, r_bin_width)
+        gal_data['binned'] = pd.cut(gal_data['r_rhalf'], bins, labels=False)
+
+        # Calculate median r/r_half and metallicity for each bin
+        binned_data = gal_data.groupby('binned').agg({'r_rhalf': 'median', 'feh': 'median'}).dropna()
+
+        # Perform linear regression
+        slope, _, _, _, std_err = stats.linregress(binned_data['r_rhalf'], binned_data['feh'])
+
+        return binned_data['r_rhalf'].values, binned_data['feh'].values, slope, std_err
+
