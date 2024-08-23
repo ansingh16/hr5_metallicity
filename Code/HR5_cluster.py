@@ -7,6 +7,11 @@ import astropy.units as u
 import pandas as pd 
 from scipy import stats
 from scipy.optimize import curve_fit
+import tqdm 
+import matplotlib.pyplot as plt
+plt.style.use('../paper_style.mplstyle')
+
+
 
 # load up the parameter file
 parser = configparser.ConfigParser()
@@ -15,6 +20,16 @@ parser.read('../params.ini')
 
 outdir = parser.get('Paths','outdir')
 h0 = float(parser.get('Setting','h0'))
+
+# Function to pad lists to the same length
+def pad_list(series):
+    max_len = max(len(x) for x in series)
+    return np.array([np.pad(x, (0, max_len - len(x)), 'constant', constant_values=np.nan) for x in series])
+
+# Compute the element-wise median with padding
+def median_list_column(series):
+    padded_array = pad_list(series)
+    return np.nanmedian(padded_array, axis=0)
 
 
 
@@ -708,4 +723,210 @@ class Galaxy(Cluster):
         slope, _, _, _, std_err = stats.linregress(binned_data['r_rhalf'], binned_data['feh'])
 
         return binned_data['r_rhalf'].values, binned_data['feh'].values, slope, std_err
+
+
+
+
+class Analysis:
+    def __init__(self, snap):
+        self.snap = snap
+        self.slope_df = None 
+        self.median_gradient_met = None
+        self.median_gradient_feh = None
+    
+    def get_slope_data(self,galids=None,clusids=None,rmax=4,rbin_width=0.1,var='met',dump='False'):
+        """
+        Parameters
+        ----------
+        galids: list
+            List of galaxy IDs
+        clusids: list
+            List of cluster IDs corresponding to the galaxy IDs
+        var: str
+            The variable to be used can be either 'met' or 'feh'
+        dump: str
+            Whether to dump the data or not
+        plot: str
+            Whether to plot the data or not
+
+        """
+        
+        
+        # if data is not to be dumped load from ../Data
+        if dump=='False':
+            main_df = pd.read_json(f'../Data/Gradient_{var}.json', orient='records', lines=True)
+
+            # if feh is to be plotted
+            if var == 'feh':         
+                # Save DataFrame to JSON file
+                slope_df_with_gas = main_df[main_df['R_g'].notna()]
+                median_Rg = median_list_column(slope_df_with_gas['R_g'])
+                median_feh = median_list_column(slope_df_with_gas['feh'])
+
+                
+                self.median_gradient_feh = pd.DataFrame({'median_Rg':median_Rg,'median_feh':median_feh})
+
+                
+
+            # if metallicity is to be plotted
+            if var == 'met':
+                                
+                                
+                # Compute the median list for columns R and Z
+                median_Rs = median_list_column(main_df['R_s'])
+                median_Zs = median_list_column(main_df['Z_s'])
+
+                slope_df_with_gas = main_df[main_df['R_g'].notna()]
+                median_Rg = median_list_column(slope_df_with_gas['R_g'])
+                median_Zg = median_list_column(slope_df_with_gas['Z_g'])
+
+                self.median_gradient_met = pd.DataFrame({'median_Rg':median_Rg,'median_Zg':median_Zg,'median_Rs':median_Rs,'median_Zs':median_Zs})
+
+
+            
+
+        elif dump=='True':
+
+            # setup main dataframe that will contain data
+            if var == 'met':
+                main_df = pd.DataFrame(columns=['ID','R_s','Z_s','slope_s','std_e_s','R_g','Z_g','slope_g','std_e_g'])
+            elif var=='feh':
+                main_df = pd.DataFrame(columns=['ID','R_s','feh','slope_feh','std_e_feh'])
+
+
+            # Loop over the galaxy IDs and cluster IDs
+            for galid,clusid in tqdm.tqdm(zip(galids,clusids),total=len(galids)):
+            
+                    # initiate cluster object and galaxy object
+                    clus = Cluster(self.snap,clusid)
+                    gal = clus.get_alldat_gal(galid)
+                    
+                    # check to see required variable is 'feh' or 'met'
+                    if var == 'feh':
+
+                        # get metallicity gradient only for galaxy with gas
+                        if gal.gal_mgas>0:
+                            R_g,feh,slope_feh,std_e_feh = gal.get_feh_slope(r_rhalf_max=rmax,r_bin_width=rbin_width)
+                        else:
+                            R_g,feh,slope_feh,std_e_feh = np.nan,np.nan,np.nan,np.nan
+
+                        # append the main_df
+                        main_df = main_df.append({'ID':galid,'clusID':clusid,'R_g':R_g,'feh':feh,'slope_feh':slope_feh,'std_e_feh':std_e_feh},ignore_index=True)
+
+                        
+                    elif var == 'met':
+                        
+                        # get metallicity gradient only for galaxies
+                        R_s,Z_s,slope_s,std_e_s = gal.get_metal_slope(r_rhalf_max=rmax,r_bin_width=rbin_width,var='star')
+
+                        # get metallicity gradient only for galaxy with gas
+                        if gal.gal_mgas>0:
+                            R_g,Z_g,slope_g,std_e_g = gal.get_metal_slope(r_rhalf_max=4,r_bin_width=0.3)
+                        else:
+                            R_g,Z_g,slope_g,std_e_g = np.nan,np.nan,np.nan,np.nan
+                        
+                       
+                        # append the main_df
+                        main_df = main_df.append({'ID':galid,'clusID':clusid,'R_s':R_s,'Z_s':Z_s,'slope_s':slope_s,'std_e_s':std_e_s,'R_g':R_g,'Z_g':Z_g,'slope_g':slope_g,'std_e_g':std_e_g},ignore_index=True)
+            
+
+            
+
+
+            # if feh is to be plotted
+            if var == 'feh':         
+                # Save DataFrame to JSON file
+                slope_df_with_gas = main_df[main_df['R_g'].notna()]
+                median_Rg = median_list_column(slope_df_with_gas['R_g'])
+                median_feh = median_list_column(slope_df_with_gas['feh'])
+
+                
+                self.median_gradient_feh = pd.DataFrame({'median_Rg':median_Rg,'median_feh':median_feh})
+
+                
+
+            # if metallicity is to be plotted
+            if var == 'met':
+                                
+                                
+                # Compute the median list for columns R and Z
+                median_Rs = median_list_column(main_df['R_s'])
+                median_Zs = median_list_column(main_df['Z_s'])
+
+                slope_df_with_gas = main_df[main_df['R_g'].notna()]
+                median_Rg = median_list_column(slope_df_with_gas['R_g'])
+                median_Zg = median_list_column(slope_df_with_gas['Z_g'])
+
+                self.median_gradient_met = pd.DataFrame({'median_Rg':median_Rg,'median_Zg':median_Zg,'median_Rs':median_Rs,'median_Zs':median_Zs})
+
+        
+        self.slope_df = main_df
+
+        
+    def plot_slope(self,var=None):
+        
+        if var == 'met':
+                fig,ax = plt.subplots(2,1,figsize=(8,10),sharex=True)
+
+        elif var == 'feh':
+                fig,ax = plt.subplots(1,1)
+
+        # plot for metallicity
+        if var == 'met':
+                    for i in tqdm.tqdm(range(len(self.slope_df))):
+    
+                        R_g = self.slope_df['R_g'].iloc[i]
+                        R_s = self.slope_df['R_s'].iloc[i]
+                        Z_s = self.slope_df['Z_s'].iloc[i]
+                        Z_g = self.slope_df['Z_g'].iloc[i]
+                        
+                        
+                        ax[0].plot(R_s,np.log10(Z_s),color='grey',alpha=0.1)
+                        
+                        # check if R_g list is not nan
+
+                        if isinstance(R_g, np.ndarray) or isinstance(R_g, list):
+                            ax[1].plot(R_g, np.log10(Z_g), color='grey', alpha=0.1)
+
+
+                    # set labels and plot
+                    ax[1].set_xlabel(r'$\mathrm{R/R_{\mathrm{half}}}$')
+                    ax[0].set_ylabel(r'$\mathrm{log \ Z_{star}(Zsun)}$')
+                    ax[1].set_ylabel(r'$\mathrm{log \ Z_{gas}(Zsun)}$')
+
+                    ax[0].plot(self.median_gradient_met.median_Rs,np.log10(self.median_gradient_met.median_Zs),marker='o',markersize=8,label=r'$\mathrm{Median \ Z_{star}}$')
+
+                    ax[1].plot(self.median_gradient_met.median_Rg,np.log10(self.median_gradient_met.median_Zg),marker='o',markersize=8,label=r'$\mathrm{Median \ Z_{gas}}$')
+                    
+                    ax[0].legend()
+                    ax[1].legend()
+
+                    # ax[1].set_ylim(-0.5,1)
+                    ax[1].set_xlim(0,4)
+
+                    fig.subplots_adjust(hspace=0)
+
+                    
+        elif var == 'feh':
+                    # plot for feh
+                    for i in tqdm.tqdm(range(len(self.slope_df))):
+
+                        R_g = self.slope_df['R_g'].iloc[i]
+                        feh = self.slope_df['feh'].iloc[i]
+
+                        # check if R_g list or numpy array
+                        if isinstance(R_g, np.ndarray) or isinstance(R_g, list):
+                            ax.plot(R_g, feh, color='grey', alpha=0.1)
+
+
+
+                    ax.plot(self.median_gradient_feh.median_Rg,self.median_gradient_feh.median_feh,marker='o',markersize=8,label='MedianFe/H')
+
+                    ax.set_xlabel(r'$\mathrm{R/R_{\mathrm{half}}}$')
+                    ax.set_ylabel(r'$\mathrm{[F/H]}$')
+
+                
+
+        fig.savefig(f'../Plots/Gradient_{var}.png')
+        fig.savefig(f'../Plots/Gradient_{var}.pdf')
 
