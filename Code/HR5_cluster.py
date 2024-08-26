@@ -151,6 +151,8 @@ class Cluster:
         galids = [gal for gal in galids if gal not in low_res]
 
         return galids
+    
+    
 
     def get_alldat_gal(self,galist):
         """
@@ -207,38 +209,25 @@ class Cluster:
             Galaxy: An instance of the Galaxy class containing all parts of the specified type.
         """
 
-        gal = Galaxy(self.snap,self.clusID)
-        galtmp = Galaxy(self.snap,self.clusID)
+        gal = Galaxy(self.snap, self.clusID)
         galids = self.get_galids()
+
         for galid in galids:
-
-                    galtmp=self.get_alldat_gal(galid)
-
-                    
-                    vars=list(self.f[f'/{self.clusID}/{galid}/'].keys())
-                    partvar = [var for var in vars if re.search(partype, var)]
-                    for var in partvar:
-                        
-                        stm=var.replace(partype,'')
-                        
-                        dat1 = getattr(gal,f'{partype}_{stm}')
-                        dat2 = np.array(getattr(galtmp,f'{partype}_{stm}'))
-                        dat_comb =np.concatenate((dat1,dat2),axis=0)
-                        
-                        setattr(gal,f'{partype}_{stm}',dat_comb)
+            galtmp = self.get_alldat_gal(galid)
+            vars = [var for var in self.f[f'/{self.clusID}/{galid}/'].keys() if re.search(partype, var)]
+            
+            for var in vars:
+                stm = var.replace(partype, '')
+                dat_comb = np.concatenate((getattr(gal, f'{partype}_{stm}'), getattr(galtmp, f'{partype}_{stm}')), axis=0)
+                setattr(gal, f'{partype}_{stm}', dat_comb)
 
         return gal
-        
-    
+                
+            
 
-    def save_yt_dataset(self,clusID):
+    def save_yt_dataset(self):
         """
         Saves the yt dataset of the BCG, ICM, and rest of the galaxies.
-        
-        Parameters:
-        -----------
-        clusID: int
-            Unique identifier of the cluster.
         
         
         Returns:
@@ -258,10 +247,11 @@ class Cluster:
         mid = self._BCG_ID()
         bcg = self.get_alldat_gal(mid)
         # Rest
-        galids=self.get_galids()
+        galids= list(self.f[f'/{self.clusID}/'].keys())
+        
         allgal = self.get_alldat_gal(galids)
         restgal = [galid for galid in galids if (galid != mid) & (galid !='ICL')]  
-        restlist = self.get_alldat_gal(restgal)
+        restgal = self.get_alldat_gal(restgal)
         #ICM
         icm = self.get_alldat_gal('ICL')
         
@@ -284,46 +274,63 @@ class Cluster:
         data_icm={}
         data_rest={}
         data_all={}
-        data_dict=[data_bcg,data_icm,data_rest,data_all]
-        for j,glx in enumerate([bcg,icm,restlist,allgal]):
+        data_dict={'BCG':data_bcg,'ICM':data_icm,'Rest':data_rest,'All':data_all}
+
+        component_dict = {'BCG':bcg,'ICM':icm,'Rest':restgal,'All':allgal}
+
+        for component in component_dict.keys():
+            print(f"filling {component} data")
+
+            glx = component_dict[component]
+            
             if not isinstance(glx,list):
                 # it is bcg or icm
                 
                 for part in ['gas','star','dm']:
-                        data_dict[j][(f"{part}","particle_mass")] = getattr(glx,f'{part}_mass')[:]
+                        data_dict[component][(f"{part}","particle_mass")] = getattr(glx,f'{part}_mass')[:]
                         for i,dir in enumerate(['x','y','z']):
-                            data_dict[j][(f"{part}",f"particle_position_{dir}")] = getattr(glx,f'{part}_pos_com')[:,i]
+                            data_dict[component][(f"{part}",f"particle_position_{dir}")] = getattr(glx,f'{part}_pos_com')[:,i]
                         
                         if part=='star':
                             for var in var_s:
-                                data_dict[j][(f"{part}",f"{var}")] = getattr(glx,f'{part}_{var}')[:]
+                                data_dict[component][(f"{part}",f"{var}")] = getattr(glx,f'{part}_{var}')[:]
                         if part=='gas':
                             for var in var_g:
-                                data_dict[j][(f"{part}",f"{var}")] = getattr(glx,f'{part}_{var}')[:]
+                                data_dict[component][(f"{part}",f"{var}")] = getattr(glx,f'{part}_{var}')[:]
                         if part=='dm':
                             for var in var_d:
-                                data_dict[j][(f"{part}",f"{var}")] = getattr(glx,f'{part}_{var}')[:]
+                                data_dict[component][(f"{part}",f"{var}")] = getattr(glx,f'{part}_{var}')[:]
             else:
                 # it is rest of galaxies and all galaxies list
                 for part in ['gas','star','dm']:
-                    data_dict[j][(f"{part}","particle_mass")] = np.concatenate([getattr(gal,f'{part}_mass') for gal in glx],axis=0)
                     
+                    
+                    
+                    data_dict[component][(f"{part}","particle_mass")] = np.concatenate([getattr(gal,f'{part}_mass') for gal in glx],axis=0)
+                    
+                    
+
                     for i,dir in enumerate(['x','y','z']):
-                            data_dict[j][(f"{part}",f"particle_position_{dir}")] = np.concatenate([getattr(gal,f'{part}_pos_com') for gal in glx],axis=0)[:,i]
+                            data_dict[component][(f"{part}",f"particle_position_{dir}")] = np.concatenate([getattr(gal,f'{part}_pos_com') for gal in glx],axis=0)[:,i]
                         
                     if part=='star':
                             for var in var_s:
-                                data_dict[j][(f"{part}",f"{var}")] = np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
+                                data_dict[component][(f"{part}",f"{var}")] = np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
                     if part=='gas':
                             for var in var_g:
-                                data_dict[j][(f"{part}",f"{var}")]= np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
+                                data_dict[component][(f"{part}",f"{var}")]= np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
                     if part=='dm':
                             for var in var_d:
-                                data_dict[j][(f"{part}",f"{var}")]= np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
+                                data_dict[component][(f"{part}",f"{var}")]= np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
             
         
-        
-        # print(data_all[('gas','particle_mass')].shape,data_all[('gas','t')].shape)
+        jjj=0
+        for dat in data_dict.keys():
+
+                print(f"{dat} has {data_dict[dat]['star','particle_mass'].shape} particles")
+                jjj = jjj+data_dict[dat]['star','particle_mass'].shape[0]
+
+
         # get width that can encompass all particles
         res=1024
         width=2
@@ -342,14 +349,14 @@ class Cluster:
         
         bbox = np.array([[-width,width], [-width, width], [-width, width]])
 
-        ds_all = yt.load_particles(data_all, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+        ds_all = yt.load_particles(data_dict['All'], length_unit='Mpc', mass_unit='Msun', bbox=bbox)
         result = yt.ParticleProjectionPlot(ds_all,'x',("star","particle_mass"))
                 
         
 
-        ds_rest = yt.load_particles(data_rest, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
-        ds_bcg = yt.load_particles(data_bcg, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
-        ds_icm = yt.load_particles(data_icm, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+        ds_rest = yt.load_particles(data_dict['Rest'], length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+        ds_bcg = yt.load_particles(data_dict['BCG'], length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+        ds_icm = yt.load_particles(data_dict['ICM'], length_unit='Mpc', mass_unit='Msun', bbox=bbox)
 
         return ds_all,ds_rest,ds_bcg,ds_icm
 
@@ -443,6 +450,7 @@ class Galaxy(Cluster):
             
             
             if galid==None:
+                self.galID = None
                 pass
             else:
                 attrs = self.f[f'/{self.clusID}/{galid}'].attrs
@@ -507,18 +515,19 @@ class Galaxy(Cluster):
         :return: None
         """
         
-        if part=='star':
-            self.star_pos_com = self.star_pos-self.gal_pos
-            self.rcom_star = np.linalg.norm(self.star_pos_com,axis=1)
+        if self.galID != None:
+            if part=='star':
+                self.star_pos_com = self.star_pos-self.gal_pos
+                self.rcom_star = np.linalg.norm(self.star_pos_com,axis=1)
 
+                
+            elif part=='gas':
+                self.gas_pos_com = self.gas_pos-self.gal_pos
+                self.rcom_gas = np.linalg.norm(self.gas_pos_com,axis=1)
             
-        elif part=='gas':
-            self.gas_pos_com = self.gas_pos-self.gal_pos
-            self.rcom_gas = np.linalg.norm(self.gas_pos_com,axis=1)
-        
-        elif part=='dm':
-            self.dm_pos_com = self.dm_pos-self.gal_pos
-            self.rcom_dm = np.linalg.norm(self.dm_pos_com,axis=1)
+            elif part=='dm':
+                self.dm_pos_com = self.dm_pos-self.gal_pos
+                self.rcom_dm = np.linalg.norm(self.dm_pos_com,axis=1)
 
     # function to get yt dataset for a single galaxy
     def get_yt_dataset(self):
@@ -650,7 +659,7 @@ class Galaxy(Cluster):
     
     
     # function for metallicity gradient
-    def get_metal_slope(self, r_rhalf_max=2, r_bin_width=0.1, var='star'):
+    def get_metal_slope(self, r_rhalf_max=2, r_bin_width=0.1, var=None):
         """
         Parameters
         ----------
@@ -733,6 +742,8 @@ class Analysis:
         self.slope_df = None 
         self.median_gradient_met = None
         self.median_gradient_feh = None
+        self.median_slope_Zg = None
+        self.median_slope_Zs = None
     
     def get_slope_data(self,galids=None,clusids=None,rmax=4,rbin_width=0.1,var='met',dump='False'):
         """
@@ -821,15 +832,13 @@ class Analysis:
 
                         # get metallicity gradient only for galaxy with gas
                         if gal.gal_mgas>0:
-                            R_g,Z_g,slope_g,std_e_g = gal.get_metal_slope(r_rhalf_max=4,r_bin_width=0.3)
+                            R_g,Z_g,slope_g,std_e_g = gal.get_metal_slope(r_rhalf_max=4,r_bin_width=0.3,var='gas')
                         else:
                             R_g,Z_g,slope_g,std_e_g = np.nan,np.nan,np.nan,np.nan
                         
                        
                         # append the main_df
                         main_df = main_df.append({'ID':galid,'clusID':clusid,'R_s':R_s,'Z_s':Z_s,'slope_s':slope_s,'std_e_s':std_e_s,'R_g':R_g,'Z_g':Z_g,'slope_g':slope_g,'std_e_g':std_e_g},ignore_index=True)
-            
-
             
 
 
@@ -861,9 +870,12 @@ class Analysis:
 
         
         self.slope_df = main_df
+        self.median_slope_Zs = main_df['slope_s'].median()
+        self.median_slope_Zg = main_df['slope_g'].median()
+        
 
         
-    def plot_slope(self,var=None):
+    def plot_gradient(self,var=None):
         
         if var == 'met':
                 fig,ax = plt.subplots(2,1,figsize=(8,10),sharex=True)
@@ -896,6 +908,7 @@ class Analysis:
 
                     ax[0].plot(self.median_gradient_met.median_Rs,np.log10(self.median_gradient_met.median_Zs),marker='o',markersize=8,label=r'$\mathrm{Median \ Z_{star}}$')
 
+                    
                     ax[1].plot(self.median_gradient_met.median_Rg,np.log10(self.median_gradient_met.median_Zg),marker='o',markersize=8,label=r'$\mathrm{Median \ Z_{gas}}$')
                     
                     ax[0].legend()
@@ -930,3 +943,6 @@ class Analysis:
         fig.savefig(f'../Plots/Gradient_{var}.png')
         fig.savefig(f'../Plots/Gradient_{var}.pdf')
 
+
+
+    
