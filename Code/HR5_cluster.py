@@ -10,7 +10,10 @@ from scipy.optimize import curve_fit
 import tqdm 
 import matplotlib.pyplot as plt
 plt.style.use('../paper_style.mplstyle')
+import logging
 
+
+yt.mylog.setLevel(logging.ERROR)
 
 
 # load up the parameter file
@@ -311,8 +314,12 @@ class Cluster:
                     
 
                     for i,dir in enumerate(['x','y','z']):
-                            data_dict[component][(f"{part}",f"particle_position_{dir}")] = np.concatenate([getattr(gal,f'{part}_pos_com') for gal in glx],axis=0)[:,i]
-                        
+                            if component == 'All':
+                                data_dict[component][(f"{part}",f"particle_position_{dir}")] = np.concatenate([getattr(gal,f'{part}_pos_com') for gal in glx],axis=0)[:,i]
+
+                            elif component == 'Rest':
+                                data_dict[component][(f"{part}",f"particle_position_{dir}")] = np.concatenate([getattr(gal,f'{part}_pos') - self.clus_pos for gal in glx],axis=0)[:,i]
+                            
                     if part=='star':
                             for var in var_s:
                                 data_dict[component][(f"{part}",f"{var}")] = np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
@@ -535,9 +542,9 @@ class Galaxy(Cluster):
         Returns a yt dataset for a single galaxy.
         """
 
-        icm = self.get_alldat_gal(self.galID)
+        gal = self.get_alldat_gal(self.galID)
         #get variable list
-        varbls=list(vars(icm))
+        varbls=list(vars(gal))
         varbls = [x for x in varbls if re.search('_',x)]
         starvar = [var.replace('star_','') for var in varbls if re.search('star_',var)and (var[0]!=r'_')]
         gasvar = [var.replace('gas_','') for var in varbls if re.search('gas_',var)and (var[0]!=r'_')]
@@ -549,28 +556,31 @@ class Galaxy(Cluster):
         var_d = set(dmvar)-set(['pos_com','mass','vel'])
         
         # the id of the galaxy in a list
-        glx=[self.get_alldat_gal(self.galID)]
+        glx=self.get_alldat_gal(self.galID)
         
         # dictionary to fill the data
         data_dict = {} 
         
         # Loop over the particle types and fill the data dictionary
+        # if self.gas_mass>0:
+        #     par_types = ['gas','star','dm']
+        # else:
+        #     par_types = ['star','dm']
+
         for part in ['gas','star','dm']:
-            data_dict[(f"{part}","particle_mass")] = np.concatenate([getattr(gal,f'{part}_mass') for gal in glx],axis=0)
-            
-            # loop over the directions for postions
-            for i,dir in enumerate(['x','y','z']):
-                    data_dict[(f"{part}",f"particle_position_{dir}")] = np.concatenate([getattr(gal,f'{part}_pos_com') for gal in glx],axis=0)[:,i]
+                        data_dict[(f"{part}","particle_mass")] = getattr(glx,f'{part}_mass')[:]
+                        for i,dir in enumerate(['x','y','z']):
+                            data_dict[(f"{part}",f"particle_position_{dir}")] = getattr(glx,f'{part}_pos_com')[:,i]
                         
-            if part=='star':
-                for var in var_s:
-                    data_dict[(f"{part}",f"{var}")] = np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
-            if part=='gas':
-                for var in var_g:
-                    data_dict[(f"{part}",f"{var}")]= np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
-            if part=='dm':
-                for var in var_d:
-                    data_dict[(f"{part}",f"{var}")]= np.concatenate([getattr(gal,f'{part}_{var}') for gal in glx],axis=0)[:]
+                        if part=='star':
+                            for var in var_s:
+                                data_dict[(f"{part}",f"{var}")] = getattr(glx,f'{part}_{var}')[:]
+                        if part=='gas':
+                            for var in var_g:
+                                data_dict[(f"{part}",f"{var}")] = getattr(glx,f'{part}_{var}')[:]
+                        if part=='dm':
+                            for var in var_d:
+                                data_dict[(f"{part}",f"{var}")] = getattr(glx,f'{part}_{var}')[:]
         
 
         data_all = data_dict
@@ -870,9 +880,12 @@ class Analysis:
 
         
         self.slope_df = main_df
-        self.median_slope_Zs = main_df['slope_s'].median()
-        self.median_slope_Zg = main_df['slope_g'].median()
-        
+        if var == 'feh':
+            self.median_slope_feh = main_df['slope_feh'].median()
+        elif var == 'met':
+            self.median_slope_Zs = main_df['slope_s'].median()
+            self.median_slope_Zg = main_df['slope_g'].median()
+            
 
         
     def plot_gradient(self,var=None):
