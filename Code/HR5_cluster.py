@@ -13,6 +13,7 @@ plt.style.use('../paper_style.mplstyle')
 import logging
 
 
+
 yt.mylog.setLevel(logging.ERROR)
 
 
@@ -775,7 +776,7 @@ class Analysis:
         
         # if data is not to be dumped load from ../Data
         if dump=='False':
-            main_df = pd.read_json(f'../Data/Gradient_{var}.json', orient='records', lines=True)
+            main_df = pd.read_json(f'../Data/Gradient_{var}.json', orient='lines')
 
             # if feh is to be plotted
             if var == 'feh':         
@@ -878,8 +879,11 @@ class Analysis:
 
                 self.median_gradient_met = pd.DataFrame({'median_Rg':median_Rg,'median_Zg':median_Zg,'median_Rs':median_Rs,'median_Zs':median_Zs})
 
-        
+            
+            main_df.to_json(f'../Data/Gradient_{var}.json',orient='records')
+            
         self.slope_df = main_df
+
         if var == 'feh':
             self.median_slope_feh = main_df['slope_feh'].median()
         elif var == 'met':
@@ -887,6 +891,7 @@ class Analysis:
             self.median_slope_Zg = main_df['slope_g'].median()
             
 
+        
         
     def plot_gradient(self,var=None):
         

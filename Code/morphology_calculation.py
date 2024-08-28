@@ -3,67 +3,91 @@ import pandas as pd
 from multiprocessing import Pool, cpu_count
 import tqdm
 import numpy as np
+import os
+import configparser
+from tqdm.contrib.concurrent import process_map  # For multiprocessing
 
+# load up the parameter file
+parser = configparser.ConfigParser()
+parser.read('../params.ini')
 
+outdir = parser.get('Paths','outdir')
+galcats = parser.get('Paths','galaxycats')
+morphs = parser.get('Paths','morphs')
+snapdir = parser.get('Paths','snapfiles')
 
-def process_cluster(clusid):
+def process_cluster(clusid,snap):
+    # Define the dtype for the columns in the morph file
+    dtype = {
+            'ID': np.int32,
+            'mstar': np.float32,
+            'galstarmass': np.float32,
+            'rmssize': np.float32,
+            'asym': np.float32,
+            'einasn': np.float16,
+            'coni': np.float32,
+            'rhalf': np.float32,
+            'sersicn': np.float16,
+            'vrot': np.float32,
+            'vsig': np.float32,
+            'sfr': np.float32
+        }
+
+    keys = list(dtype.keys())
+    values = list(dtype.values())
+
     # print(f"Processing cluster {clusid}")
+     # Load the morph data
+    mrp = np.genfromtxt(f'{morphs}/galmorf.out_{snap}.txt', dtype=values)
+
+    # Convert morph to a DataFrame
+    mrp = pd.DataFrame(mrp)
+    mrp.columns = keys
+
+
     clusdict = []
-    clus = hr5.Cluster(snapshot, clusid)
+    clus = hr5.Cluster(snap, clusid)
     for galid in clus.get_galids():
             
            
             mor = mrp.loc[mrp['ID']==int(galid),'sersicn'].values[0]
             
             clusdict.append({'clusID':clusid, 'sersicn':mor, 'ID':galid})
-    
-           
 
     return clusdict
+def process_snap(snap):
 
-# Get all the IDs of clusters present at the given snapshot
-snapshot = 296
+    print(f"Processing snapshot {snap}")
+    
+    try:
 
-# Define the instance of the class Cluster with the snapshot
-clus296 = pd.read_csv('../Data/groups5e13.csv')
+        clusters = pd.read_csv(f'{snapdir}/{snap}.dat')
+    
 
-snap296 = pd.read_parquet('/scratch/ankitsingh/Galaxy_catalogs/galaxy_catalogue_296.parquet')
+        allgal=[]
+        for clusid in tqdm.tqdm(clusters.HostHaloID.values):
+                
+            allgal.append(process_cluster(clusid,snap))
+                
+        allgal = [item for sublist in allgal for item in sublist]
 
+        morpho = pd.DataFrame(allgal)
 
-# Define the dtype for the columns in the morph file
-dtype = {
-        'ID': np.int32,
-        'mstar': np.float32,
-        'galstarmass': np.float32,
-        'rmssize': np.float32,
-        'asym': np.float32,
-        'einasn': np.float16,
-        'coni': np.float32,
-        'rhalf': np.float32,
-        'sersicn': np.float16,
-        'vrot': np.float32,
-        'vsig': np.float32,
-        'sfr': np.float32
-    }
+        morpho.to_csv(f'{morphs}/morphology_{snap}.csv',index=False)
 
-keys = list(dtype.keys())
-values = list(dtype.values())
+        print(f"Done processing snapshot {snap}")
 
-# Load the morph data
-mrp = np.genfromtxt('../Data/galmorf.out_296.txt', dtype=values)
+    except Exception as e:
+         # get error 
+         print(f"Error processing snapshot {snap} with error {e}")
+    
 
-# Convert morph to a DataFrame
-mrp = pd.DataFrame(mrp)
-mrp.columns = keys
+# main function
+if __name__ == '__main__':
 
+    snaps = [os.path.splitext(file)[0] for file in os.listdir(snapdir)]
 
-allgal=[]
-for clusid in tqdm.tqdm(clus296.HostHaloID.values):
-         
-    allgal.append(process_cluster(clusid))
-        
-allgal = [item for sublist in allgal for item in sublist]
+    
+    with Pool(4) as p:
+        p.map(process_snap, snaps)
 
-morpho = pd.DataFrame(allgal)
-
-morpho.to_csv('../Data/morphology.csv',index=False)
