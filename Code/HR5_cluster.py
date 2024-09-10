@@ -11,7 +11,7 @@ import tqdm
 import matplotlib.pyplot as plt
 plt.style.use('../paper_style.mplstyle')
 import logging
-
+import math
 
 
 yt.mylog.setLevel(logging.ERROR)
@@ -723,28 +723,33 @@ class Galaxy(Cluster):
 
         # Get half-mass radius and select metallicity and distance arrays based on particle type
         half_mass_radius = self._half_mass_radius('gas')
-        
         feh, dist = self.gas_fe[:]/self.gas_h[:], self.r_gas_sc
         
-        # Normalize metallicity and calculate r/r_half
-        gal_data = pd.DataFrame({
-            'r_rhalf': dist / half_mass_radius,
-            'feh': np.log10(feh) + 4.5
-        })
+        if half_mass_radius>0:
+            # Normalize metallicity and calculate r/r_half
+            gal_data = pd.DataFrame({
+                'r_rhalf': dist / half_mass_radius,
+                'feh': np.log10(feh) + 4.5
+            })
 
-        # Bin the data
-        bins = np.arange(0, r_rhalf_max, r_bin_width)
-        gal_data['binned'] = pd.cut(gal_data['r_rhalf'], bins, labels=False)
+            
+            # Bin the data
+            bins = np.arange(0, r_rhalf_max, r_bin_width)
 
-        # Calculate median r/r_half and metallicity for each bin
-        binned_data = gal_data.groupby('binned').agg({'r_rhalf': 'median', 'feh': 'median'}).dropna()
+            gal_data['binned'] = pd.cut(gal_data['r_rhalf'], bins, labels=False)
 
-        # Perform linear regression
-        slope, _, _, _, std_err = stats.linregress(binned_data['r_rhalf'], binned_data['feh'])
+            # Calculate median r/r_half and metallicity for each bin
+            binned_data = gal_data.groupby('binned').agg({'r_rhalf': 'median', 'feh': 'median'}).dropna()
 
-        return binned_data['r_rhalf'].values, binned_data['feh'].values, slope, std_err
+            
+            
+            slope, _, _, _, std_err = stats.linregress(binned_data['r_rhalf'], binned_data['feh'])
+            
+        
+            return binned_data['r_rhalf'].values, binned_data['feh'].values, slope, std_err
 
-
+        else:
+             return np.nan, np.nan, np.nan, np.nan
 
 
 class Analysis:
@@ -774,9 +779,9 @@ class Analysis:
         """
         
         
-        # if data is not to be dumped load from ../Data
+        # if data is not to be dumped load from {outdir}
         if dump=='False':
-            main_df = pd.read_json(f'../Data/Gradient_{var}.json', orient='lines')
+            main_df = pd.read_json(f'{outdir}/Gradient_{var}.json', orient='lines')
 
             # if feh is to be plotted
             if var == 'feh':         
@@ -880,7 +885,7 @@ class Analysis:
                 self.median_gradient_met = pd.DataFrame({'median_Rg':median_Rg,'median_Zg':median_Zg,'median_Rs':median_Rs,'median_Zs':median_Zs})
 
             
-            main_df.to_json(f'../Data/Gradient_{var}.json',orient='records')
+            main_df.to_json(f'{outdir}/Gradient_{var}.json',orient='records')
             
         self.slope_df = main_df
 
@@ -893,7 +898,7 @@ class Analysis:
 
         
         
-    def plot_gradient(self,var=None):
+    def plot_gradient(self,var=None,save=True):
         
         if var == 'met':
                 fig,ax = plt.subplots(2,1,figsize=(8,10),sharex=True)
@@ -956,10 +961,11 @@ class Analysis:
                     ax.set_xlabel(r'$\mathrm{R/R_{\mathrm{half}}}$')
                     ax.set_ylabel(r'$\mathrm{[F/H]}$')
 
-                
 
-        fig.savefig(f'../Plots/Gradient_{var}.png')
-        fig.savefig(f'../Plots/Gradient_{var}.pdf')
+        if save:    
+
+            fig.savefig(f'../Plots/Gradient_{var}.png')
+            fig.savefig(f'../Plots/Gradient_{var}.pdf')
 
 
 
