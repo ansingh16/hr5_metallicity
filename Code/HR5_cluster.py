@@ -684,30 +684,42 @@ class Galaxy(Cluster):
 
         # Get half-mass radius and select metallicity and distance arrays based on particle type
         half_mass_radius = self._half_mass_radius(var)
-        if var == 'star':
-            met, dist = self.star_z[:], self.r_star_sc
-        elif var == 'gas':
-            met, dist = self.gas_z[:], self.r_gas_sc
+
+        if half_mass_radius>0:
+
+            if var == 'star':
+                met, dist = self.star_z[:], self.r_star_sc
+            elif var == 'gas':
+                met, dist = self.gas_z[:], self.r_gas_sc
+            else:
+                raise ValueError("Invalid particle type. Choose from 'star', 'gas', or 'dm'.")
+        
+            # Normalize metallicity and calculate r/r_half
+            gal_data = pd.DataFrame({
+                'r_rhalf': dist / half_mass_radius,
+                var: met / 0.02
+            })
+
+            
+            # Bin the data
+            bins = np.arange(0, r_rhalf_max, r_bin_width)
+
+            gal_data['binned'] = pd.cut(gal_data['r_rhalf'], bins, labels=False)
+
+            # Calculate median r/r_half and metallicity for each bin
+            binned_data = gal_data.groupby('binned').agg({'r_rhalf': 'median', var: 'median'}).dropna()
+
+            
+            
+            slope, _, _, _, std_err = stats.linregress(binned_data['r_rhalf'], binned_data[var])
+            
+        
+            return binned_data['r_rhalf'].values, binned_data[var].values, slope, std_err
+
         else:
-            raise ValueError("Invalid particle type. Choose from 'star', 'gas', or 'dm'.")
-
-        # Normalize metallicity and calculate r/r_half
-        gal_data = pd.DataFrame({
-            'r_rhalf': dist / half_mass_radius,
-            var: met / 0.02
-        })
-
-        # Bin the data
-        bins = np.arange(0, r_rhalf_max, r_bin_width)
-        gal_data['binned'] = pd.cut(gal_data['r_rhalf'], bins, labels=False)
-
-        # Calculate median r/r_half and metallicity for each bin
-        binned_data = gal_data.groupby('binned').agg({'r_rhalf': 'median', var: 'median'}).dropna()
-
-        # Perform linear regression
-        slope, _, _, _, std_err = stats.linregress(binned_data['r_rhalf'], binned_data[var])
-
-        return binned_data['r_rhalf'].values, binned_data[var].values, slope, std_err
+             return np.nan, np.nan, np.nan, np.nan
+        
+        
 
 
 # function for metallicity gradient
