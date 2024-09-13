@@ -738,6 +738,8 @@ class Galaxy(Cluster):
         feh, dist = self.gas_fe[:]/self.gas_h[:], self.r_gas_sc
         
         if half_mass_radius>0:
+            if feh ==0:
+                feh=np.nan
             # Normalize metallicity and calculate r/r_half
             gal_data = pd.DataFrame({
                 'r_rhalf': dist / half_mass_radius,
@@ -793,7 +795,7 @@ class Analysis:
         
         # if data is not to be dumped load from {outdir}
         if dump=='False':
-            main_df = pd.read_json(f'{outdir}/Gradient_{var}.json', orient='lines')
+            main_df = pd.read_json(f'{outdir}/Gradient_{var}_{self.snap}.json', orient='lines')
 
             # if feh is to be plotted
             if var == 'feh':         
@@ -897,7 +899,7 @@ class Analysis:
                 self.median_gradient_met = pd.DataFrame({'median_Rg':median_Rg,'median_Zg':median_Zg,'median_Rs':median_Rs,'median_Zs':median_Zs})
 
             
-            main_df.to_json(f'{outdir}/Gradient_{var}.json',orient='records')
+            main_df.to_json(f'{outdir}/Gradient_{var}_{self.snap}.json',orient='records')
             
         self.slope_df = main_df
 
@@ -910,14 +912,16 @@ class Analysis:
 
         
         
-    def plot_gradient(self,var=None,save=True):
+    def plot_gradient(self,var=None,save=True,axes=None):
         
-        if var == 'met':
+        if var == 'met' and axes is None:
                 fig,ax = plt.subplots(2,1,figsize=(8,10),sharex=True)
 
-        elif var == 'feh':
+        elif var == 'feh' and axes is None:
                 fig,ax = plt.subplots(1,1)
 
+        if axes is not None:
+            ax = axes
         # plot for metallicity
         if var == 'met':
                     for i in tqdm.tqdm(range(len(self.slope_df))):
@@ -952,8 +956,7 @@ class Analysis:
                     # ax[1].set_ylim(-0.5,1)
                     ax[1].set_xlim(0,4)
 
-                    fig.subplots_adjust(hspace=0)
-
+                    
                     
         elif var == 'feh':
                     # plot for feh
@@ -974,11 +977,16 @@ class Analysis:
                     ax.set_ylabel(r'$\mathrm{[F/H]}$')
 
 
-        if save:    
-
+        if save and ax is None:    
+            fig.subplots_adjust(hspace=0)
             fig.savefig(f'../Plots/Gradient_{var}.png')
             fig.savefig(f'../Plots/Gradient_{var}.pdf')
+        
+        if save and ax is not None:
+            print("supplied axes, not saving")
 
+            return axes
 
+            
 
     

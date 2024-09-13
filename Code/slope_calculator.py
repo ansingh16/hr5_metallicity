@@ -45,7 +45,7 @@ def process_snap(snap):
     slope_median_Zg = Ana.median_slope_Zg
 
     
-
+    Ana.slope_df.to_json(f'{outdir}/Slope_{snap}.json')
 
     return snap,slope_median_feh,slope_median_Zs,slope_median_Zg
 
