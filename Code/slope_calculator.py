@@ -34,18 +34,19 @@ def process_snap(snap):
 
     Ana = hr5.Analysis(snap)
 
-    Ana.get_slope_data(galids=e_galaxies.index,clusids=e_galaxies.clusID,rmax=4,rbin_width=0.3,var='feh',dump='True')
+    Ana.get_slope_data(galids=e_galaxies.index,clusids=e_galaxies.clusID,rmax=4,rbin_width=0.3,var='feh',dump_data=True,use_cache=False)
 
     slope_median_feh = Ana.median_slope_feh
 
+    Ana.slope_df.to_json(f'{outdir}/Slope_feh_{snap}.json')
 
-    Ana.get_slope_data(galids=e_galaxies.index,clusids=e_galaxies.clusID,rmax=4,rbin_width=0.3,var='met',dump='True')
+    Ana.get_slope_data(galids=e_galaxies.index,clusids=e_galaxies.clusID,rmax=4,rbin_width=0.3,var='met',dump_data=True,use_cache=False)
 
     slope_median_Zs = Ana.median_slope_Zs
     slope_median_Zg = Ana.median_slope_Zg
 
     
-    Ana.slope_df.to_json(f'{outdir}/Slope_{snap}.json')
+    Ana.slope_df.to_json(f'{outdir}/Slope_met_{snap}.json')
 
     return snap,slope_median_feh,slope_median_Zs,slope_median_Zg
 

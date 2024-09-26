@@ -738,8 +738,10 @@ class Galaxy(Cluster):
         feh, dist = self.gas_fe[:]/self.gas_h[:], self.r_gas_sc
         
         if half_mass_radius>0:
-            if feh ==0:
-                feh=np.nan
+
+            # fill 0 with nan because we take log
+            feh = [np.nan if x == 0 else x for x in feh]
+
             # Normalize metallicity and calculate r/r_half
             gal_data = pd.DataFrame({
                 'r_rhalf': dist / half_mass_radius,
@@ -775,7 +777,7 @@ class Analysis:
         self.median_slope_Zg = None
         self.median_slope_Zs = None
     
-    def get_slope_data(self,galids=None,clusids=None,rmax=4,rbin_width=0.1,var='met',dump='False'):
+    def get_slope_data(self,galids=None,clusids=None,rmax=4,rbin_width=0.1,var='met',dump_data=False,use_cache=True):
         """
         Parameters
         ----------
@@ -786,15 +788,16 @@ class Analysis:
         var: str
             The variable to be used can be either 'met' or 'feh'
         dump: str
-            Whether to dump the data or not
+            Whether to dump the data or not possible values are False, True and load
         plot: str
             Whether to plot the data or not
-
+        use_cache: bool
+            Whether to use old data or not
         """
         
         
         # if data is not to be dumped load from {outdir}
-        if dump=='False':
+        if use_cache:
             main_df = pd.read_json(f'{outdir}/Gradient_{var}_{self.snap}.json', orient='lines')
 
             # if feh is to be plotted
@@ -826,7 +829,7 @@ class Analysis:
 
             
 
-        elif dump=='True':
+        else :
 
             # setup main dataframe that will contain data
             if var == 'met':
@@ -898,8 +901,8 @@ class Analysis:
 
                 self.median_gradient_met = pd.DataFrame({'median_Rg':median_Rg,'median_Zg':median_Zg,'median_Rs':median_Rs,'median_Zs':median_Zs})
 
-            
-            main_df.to_json(f'{outdir}/Gradient_{var}_{self.snap}.json',orient='records')
+            if dump_data=='True':
+                main_df.to_json(f'{outdir}/Gradient_{var}_{self.snap}.json',orient='records')
             
         self.slope_df = main_df
 
@@ -912,7 +915,7 @@ class Analysis:
 
         
         
-    def plot_gradient(self,var=None,save=True,axes=None):
+    def plot_gradient(self,var=None,save=True,axes=None,plot_gal=True):
         
         if var == 'met' and axes is None:
                 fig,ax = plt.subplots(2,1,figsize=(8,10),sharex=True)
@@ -931,13 +934,15 @@ class Analysis:
                         Z_s = self.slope_df['Z_s'].iloc[i]
                         Z_g = self.slope_df['Z_g'].iloc[i]
                         
-                        
-                        ax[0].plot(R_s,np.log10(Z_s),color='grey',alpha=0.1)
+                        if plot_gal:
+                            ax[0].plot(R_s,np.log10(Z_s),color='grey',alpha=0.1)
                         
                         # check if R_g list is not nan
 
                         if isinstance(R_g, np.ndarray) or isinstance(R_g, list):
-                            ax[1].plot(R_g, np.log10(Z_g), color='grey', alpha=0.1)
+
+                            if plot_gal:
+                                ax[1].plot(R_g, np.log10(Z_g), color='grey', alpha=0.1)
 
 
                     # set labels and plot
@@ -967,14 +972,17 @@ class Analysis:
 
                         # check if R_g list or numpy array
                         if isinstance(R_g, np.ndarray) or isinstance(R_g, list):
-                            ax.plot(R_g, feh, color='grey', alpha=0.1)
+
+                            if plot_gal:
+                                ax.plot(R_g, feh, color='grey', alpha=0.1)
 
 
 
-                    ax.plot(self.median_gradient_feh.median_Rg,self.median_gradient_feh.median_feh,marker='o',markersize=8,label='MedianFe/H')
+                    ax.plot(self.median_gradient_feh.median_Rg,self.median_gradient_feh.median_feh,marker='o',markersize=8,label='Median Fe/H')
 
                     ax.set_xlabel(r'$\mathrm{R/R_{\mathrm{half}}}$')
-                    ax.set_ylabel(r'$\mathrm{[F/H]}$')
+                    ax.set_ylabel(r'$\mathrm{[Fe/H]}$')
+                    ax.legend()
 
 
         if save and ax is None:    
