@@ -767,6 +767,50 @@ class Galaxy(Cluster):
         else:
              return np.nan, np.nan, np.nan, np.nan
 
+    def get_ofe_slope(self, r_rhalf_max=2, r_bin_width=0.1):
+        """
+        Parameters
+        ----------
+        r_rhalf_max: float
+            Maximum radius of the bin
+        r_bin_width: float
+            Width of the bin
+        """
+
+        # Get half-mass radius and select metallicity and distance arrays based on particle type
+        half_mass_radius = self._half_mass_radius('gas')
+        ofe, dist = self.gas_o[:]/self.gas_fe[:], self.r_gas_sc
+        
+        if half_mass_radius>0:
+
+            # fill 0 with nan because we take log
+            ofe = [np.nan if x == 0 else x for x in ofe]
+
+            # Normalize metallicity and calculate r/r_half
+            gal_data = pd.DataFrame({
+                'r_rhalf': dist / half_mass_radius,
+                'ofe': 1.5 + np.log10(ofe) 
+            })
+
+            
+            # Bin the data
+            bins = np.arange(0, r_rhalf_max, r_bin_width)
+
+            gal_data['binned'] = pd.cut(gal_data['r_rhalf'], bins, labels=False)
+
+            # Calculate median r/r_half and metallicity for each bin
+            binned_data = gal_data.groupby('binned').agg({'r_rhalf': 'median', 'ofe': 'median'}).dropna()
+
+            
+            
+            slope, _, _, _, std_err = stats.linregress(binned_data['r_rhalf'], binned_data['ofe'])
+            
+        
+            return binned_data['r_rhalf'].values, binned_data['ofe'].values, slope, std_err
+
+        else:
+             return np.nan, np.nan, np.nan, np.nan
+
 
 class Analysis:
     def __init__(self, snap):
@@ -810,6 +854,17 @@ class Analysis:
                 
                 self.median_gradient_feh = pd.DataFrame({'median_Rg':median_Rg,'median_feh':median_feh})
 
+            
+            # if feh is to be plotted
+            if var == 'ofe':         
+                # Save DataFrame to JSON file
+                slope_df_with_gas = main_df[main_df['R_g'].notna()]
+                median_Rg = median_list_column(slope_df_with_gas['R_g'])
+                median_ofe = median_list_column(slope_df_with_gas['ofe'])
+
+                
+                self.median_gradient_ofe = pd.DataFrame({'median_Rg':median_Rg,'median_ofe':median_ofe})
+
                 
 
             # if metallicity is to be plotted
@@ -836,7 +891,8 @@ class Analysis:
                 main_df = pd.DataFrame(columns=['ID','R_s','Z_s','slope_s','std_e_s','R_g','Z_g','slope_g','std_e_g'])
             elif var=='feh':
                 main_df = pd.DataFrame(columns=['ID','R_s','feh','slope_feh','std_e_feh'])
-
+            elif var=='ofe':
+                main_df = pd.DataFrame(columns=['ID','R_s','ofe','slope_ofe','std_e_ofe'])
 
             # Loop over the galaxy IDs and cluster IDs
             for galid,clusid in tqdm.tqdm(zip(galids,clusids),total=len(galids)):
@@ -856,6 +912,18 @@ class Analysis:
 
                         # append the main_df
                         main_df = main_df.append({'ID':galid,'clusID':clusid,'R_g':R_g,'feh':feh,'slope_feh':slope_feh,'std_e_feh':std_e_feh},ignore_index=True)
+
+                    # check to see required variable is 'feh' or 'met'
+                    elif var == 'ofe':
+
+                        # get metallicity gradient only for galaxy with gas
+                        if gal.gal_mgas>0:
+                            R_g,ofe,slope_ofe,std_e_ofe = gal.get_ofe_slope(r_rhalf_max=rmax,r_bin_width=rbin_width)
+                        else:
+                            R_g,ofe,slope_ofe,std_e_ofe = np.nan,np.nan,np.nan,np.nan
+
+                        # append the main_df
+                        main_df = main_df.append({'ID':galid,'clusID':clusid,'R_g':R_g,'ofe':ofe,'slope_ofe':slope_ofe,'std_e_ofe':std_e_ofe},ignore_index=True)
 
                         
                     elif var == 'met':
@@ -885,6 +953,17 @@ class Analysis:
                 
                 self.median_gradient_feh = pd.DataFrame({'median_Rg':median_Rg,'median_feh':median_feh})
 
+            
+            # if ofe is to be plotted
+            if var == 'ofe':         
+                # Save DataFrame to JSON file
+                slope_df_with_gas = main_df[main_df['R_g'].notna()]
+                median_Rg = median_list_column(slope_df_with_gas['R_g'])
+                median_ofe = median_list_column(slope_df_with_gas['ofe'])
+
+                
+                self.median_gradient_ofe = pd.DataFrame({'median_Rg':median_Rg,'median_ofe':median_ofe})
+
                 
 
             # if metallicity is to be plotted
@@ -901,13 +980,15 @@ class Analysis:
 
                 self.median_gradient_met = pd.DataFrame({'median_Rg':median_Rg,'median_Zg':median_Zg,'median_Rs':median_Rs,'median_Zs':median_Zs})
 
-            if dump_data=='True':
+            if dump_data==True:
                 main_df.to_json(f'{outdir}/Gradient_{var}_{self.snap}.json',orient='records')
             
         self.slope_df = main_df
 
         if var == 'feh':
             self.median_slope_feh = main_df['slope_feh'].median()
+        if var == 'ofe':
+            self.median_slope_ofe = main_df['slope_ofe'].median()
         elif var == 'met':
             self.median_slope_Zs = main_df['slope_s'].median()
             self.median_slope_Zg = main_df['slope_g'].median()
