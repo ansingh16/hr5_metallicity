@@ -1076,6 +1076,42 @@ class Analysis:
 
             return axes
 
-            
+                
+    def get_variable_allgal(self,galids,clusids):
 
-    
+       
+
+        main_df = []
+
+        # Loop over the galaxy IDs and cluster IDs
+        for galid,clusid in tqdm.tqdm(zip(galids,clusids),total=len(galids)): 
+                clus = Cluster(self.snap,clusid)
+                gal = clus.get_alldat_gal(galid)
+
+                # get metallicity gradient only for galaxy with gas
+                if gal.gal_mgas>0:
+                    
+                        # get weighted mean of feh
+                        feh = gal.gas_fe[:]/gal.gas_h[:]
+                        mean_feh = np.nanmedian(feh)
+
+                        mean_feh = np.log10(mean_feh) + 4.5
+
+                        # get weighted mean of feh
+                        ofe = gal.gas_o[:]/gal.gas_fe[:]
+                        mean_ofe = np.nanmedian(ofe)
+
+                        mean_ofe = 1.5 + np.log10(mean_ofe) 
+
+                        main_df.append({'clusid':clus.clusID,'galid':gal.galID,'mean_ofe':mean_ofe,'mean_feh':mean_feh})
+                        
+
+                         
+                
+        # convert to dataframe
+        main_df = pd.DataFrame(main_df)         
+
+        return main_df
+
+
+            
