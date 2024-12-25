@@ -5,11 +5,11 @@ import yt
 from yt.units import Msun, Mpc
 import tqdm 
 import matplotlib.pyplot as plt 
-plt.style.use('/home/ankitsingh/hr5_agn/paper_style.mplstyle')
+#plt.style.use('/home/ankitsingh/hr5_agn/paper_style.mplstyle')
 
 # low information printing for yt
 # avoiding unnecessary information can save execution time 
-yt.set_log_level(40)
+#yt.set_log_level(40)
 
 
 import configparser
@@ -20,32 +20,21 @@ import glob
 
 import configparser
 
-# load up the parameter file
-parser = configparser.ConfigParser()
-parser.read('params.ini')
 
 
-outdir = parser.get('Paths','outdir')
-clusfile = parser.get('Paths','clusfile')
 
 
 # load up the parameter file
 parser = configparser.ConfigParser()
-parser.read('params.ini')
+parser.read('../params.ini')
 
 
 # setting paths containg HR5 directories
-Fofd = parser.get('Paths','Fofdir')
+#Fofd = parser.get('Paths','Fofdir')
 output = parser.get('Paths','outdir')
 
-# read clusters of interest and their half mass times
-clusmer = pd.read_csv('../isomm_time.txt')
-clus_half = pd.read_csv(f'{output}/halfmass.csv')
-Timedat = pd.read_csv('../Time_data.dat')
 
 
-# read all the snapshot dat files
-files = glob.glob('*.dat')
 
 
 # Function for saving png corresponding to each cluster
@@ -74,15 +63,17 @@ def cluster_projection(cluslast,clusID):
             ax.scatter(pos[:,1],pos[:,2],s=0.2,color='b',alpha=0.1)
         
     
-    fig.savefig(f'{outdir}/{cluslast}/{snap}_Proj{clusID}.png')
+    fig.savefig(f'{output}/{cluslast}/{snap}_Proj{clusID}.png')
 
 
 # Function to make fits file containing the projected positions of the clusters
 # called from savefits function
 def make_fits(comp,proj,ds,width,res,kind):
 
+    print(ds.derived_field_list)
+
     prjpd_fits = yt.FITSParticleProjection(
-            ds, proj, (comp, "particle_mass"),density=True, deposition="mass",length_unit='Mpc',image_res=[res,res])
+            ds, proj, (comp, "particle_mass"),density=True, deposition="ngp",length_unit='Mpc',image_res=[res,res])
 
     prjpd_fits.change_image_name("particle_mass", f"{kind}_{comp}_density_{proj}")
 
@@ -149,17 +140,25 @@ def savefits(cluslast,clusID):
     mgas_icl = np.array([])
 
 
+
+    print('galaxy IDs?: ',f[f'/{clusID}/'].keys())
     # get total mass of first galaxy
     mid=next(iter(f[f'/{clusID}/'].keys()))
-
+    print('mid at start: ',mid)
 
     mostmass=f[f'/{clusID}/{mid}/'].attrs['mtot']
 
+    print('mass at start: ', mostmass)
+    
     for gal in f[f'/{clusID}/'].keys():
+        if(gal=='ICL'):
+            break 
+        print('mass: ',f[f'/{clusID}/{gal}'].attrs['mtot'])
         if f[f'/{clusID}/{gal}'].attrs['mtot']>mostmass:
                 mostmass = f[f'/{clusID}/{gal}'].attrs['mtot']
                 mid = gal 
 
+    print('mid at end: ',mid)
     # mid contains the ID of the BCG
 
     for gal in f[f'/{clusID}/'].keys():
@@ -337,7 +336,7 @@ def savefits(cluslast,clusID):
     ds_bcg = yt.load_particles(data_bcg, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
     ds_icl = yt.load_particles(data_icl, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
 
-    
+
     all_img=[]
     for cm in ['star','dm','gas']:
 
@@ -366,55 +365,16 @@ def savefits(cluslast,clusID):
 
     # combined fits for all particles
     prj_fits_comb = yt.FITSImageData.from_images(all_img)
-    prj_fits_comb.writeto(f'{outdir}/{cluslast}/{snap}_{clusID}.fits', overwrite=True)
+    prj_fits_comb.writeto(f'{output}/{cluslast}/{snap}_{clusID}.fits', overwrite=True)
 
 
 
 
-# Main code
+# Main code 
 
-# loop over clusters of interest
-for clus in tqdm.tqdm(clusmer['HostHaloID'].unique()):
+for snap in range(1,31):
+    # save fits
+    with h5py.File(f"{output}clusters{snap}.hdf5", "r") as f:
+        savefits(0,0)        
 
-
-                # read the redshift and get half mass snapshot
-                Red = clus_half.loc[clus_half['HostHaloID']==clus,'Redshift'].values[0]
-                half_snap = Timedat.loc[Timedat['Redshift']==Red,'Snapshot'].values[0]
-
-                # read mass accretion files
-                MAHfile = pd.read_csv(f"{output}/{clus}_MAH.csv")
-
-                # # get snaps that come after half mass accumulation
-                # beyond_half = MAHfile[MAHfile['snap']>half_snap]
-                
-                # # last snapshot is already done in previous analysis
-                # beyond_half = beyond_half[beyond_half['snap'] != 296]
-                
-                if not os.path.exists(f"{output}/{clus}"):
-                    os.mkdir(f"{output}/{clus}")
-
-                # Loop over the progenitors and make fits 
-                for snap,haloid in zip(MAHfile['snap'].values,MAHfile['HostHaloID'].values):
-                        
-                        
-                        if f'{snap}.dat' in sorted(files):
-                            
-                            hid = pd.read_csv(f'./{snap}.dat')
-                            
-                            if haloid in hid.to_numpy():
-                                
-                                # read snap hdf5 file containing the data
-                                
-                                f = h5py.File(f"{outdir}clusters{snap}.hdf5", "r")
-
-                                print(f"For cluster = {clus}, Reading {snap} and Halo = {haloid}")
-                                
-                                # save fits
-                                savefits(clus,haloid)        
-                                # save projections png
-                                # cluster_projection(clus,haloid)
-                        else:
-                            break 
-
-                    
-            
+                     

@@ -739,9 +739,8 @@ class Galaxy(Cluster):
         
         if half_mass_radius>0:
 
-
-            # fill 0 with nan because we take log and convert it to number density
-            feh = [np.nan if x == 0 else x for x in feh*(1.008/55.845)]
+            # fill 0 with nan because we take log
+            feh = [np.nan if x == 0 else x for x in feh]
 
             # Normalize metallicity and calculate r/r_half
             gal_data = pd.DataFrame({
@@ -785,12 +784,12 @@ class Galaxy(Cluster):
         if half_mass_radius>0:
 
             # fill 0 with nan because we take log
-            ofe = [np.nan if x == 0 else x for x in ofe*(55.845/15.999)]
+            ofe = [np.nan if x == 0 else x for x in ofe]
 
             # Normalize metallicity and calculate r/r_half
             gal_data = pd.DataFrame({
                 'r_rhalf': dist / half_mass_radius,
-                'ofe': np.log10(ofe) - 1.2
+                'ofe': 1.5 + np.log10(ofe) 
             })
 
             
@@ -1094,21 +1093,15 @@ class Analysis:
                     
                         # get weighted mean of feh
                         feh = gal.gas_fe[:]/gal.gas_h[:]
-
-                        # convert to number density
-                        feh = feh*(1.008/55.845)
-
                         mean_feh = np.nanmedian(feh)
 
                         mean_feh = np.log10(mean_feh) + 4.5
 
                         # get weighted mean of feh
                         ofe = gal.gas_o[:]/gal.gas_fe[:]
-
-                        ofe = ofe*(55.845/15.999)
                         mean_ofe = np.nanmedian(ofe)
 
-                        mean_ofe =  np.log10(mean_ofe) - 1.2
+                        mean_ofe = 1.5 + np.log10(mean_ofe) 
 
                         main_df.append({'clusid':clus.clusID,'galid':gal.galID,'mean_ofe':mean_ofe,'mean_feh':mean_feh})
                         
