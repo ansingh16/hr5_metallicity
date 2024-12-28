@@ -73,7 +73,7 @@ def make_fits(comp,proj,ds,width,res,kind):
     print(ds.derived_field_list)
 
     prjpd_fits = yt.FITSParticleProjection(
-            ds, proj, (comp, "particle_mass"),density=True, deposition="ngp",length_unit='Mpc',image_res=[res,res])
+            ds, proj, (comp, "particle_mass"),density=True, deposition="ngp",length_unit='Mpc',image_res=[res,res],weight_field=None)
 
     prjpd_fits.change_image_name("particle_mass", f"{kind}_{comp}_density_{proj}")
 
@@ -141,22 +141,39 @@ def savefits(cluslast,clusID):
 
 
 
-    print('galaxy IDs?: ',f[f'/{clusID}/'].keys())
-    # get total mass of first galaxy
-    mid=next(iter(f[f'/{clusID}/'].keys()))
-    print('mid at start: ',mid)
+    # print('galaxy IDs?: ',f[f'/{clusID}/'].keys())
+    # # get total mass of first galaxy
+    # mid=next(iter(f[f'/{clusID}/'].keys()))
+    # print('mid at start: ',mid)
 
-    mostmass=f[f'/{clusID}/{mid}/'].attrs['mtot']
+    # mostmass=f[f'/{clusID}/{mid}/'].attrs['mtot']
 
-    print('mass at start: ', mostmass)
+    # print('mass at start: ', mostmass)
     
-    for gal in f[f'/{clusID}/'].keys():
-        if(gal=='ICL'):
-            break 
-        print('mass: ',f[f'/{clusID}/{gal}'].attrs['mtot'])
-        if f[f'/{clusID}/{gal}'].attrs['mtot']>mostmass:
-                mostmass = f[f'/{clusID}/{gal}'].attrs['mtot']
-                mid = gal 
+    # for gal in f[f'/{clusID}/'].keys().remove:
+    #     # if(gal=='ICL'):
+    #     #     break 
+    #     # print('mass: ',f[f'/{clusID}/{gal}'].attrs['mtot'])
+    #     if f[f'/{clusID}/{gal}'].attrs['mtot']>mostmass:
+    #             mostmass = f[f'/{clusID}/{gal}'].attrs['mtot']
+    #             mid = gal 
+    
+    galids = list(f[f'/{clusID}/'].keys())
+        
+        
+    galids.remove('ICL')
+
+    mid=-1
+
+
+    mostmass=0
+    #print("starting",mostmass)
+    for gal in galids:
+        if f[f'/{clusID}/{gal}'].attrs['mstar']>mostmass:
+            mostmass = f[f'/{clusID}/{gal}'].attrs['mstar']
+            mid = gal 
+        #print(mid,mostmass)
+
 
     print('mid at end: ',mid)
     # mid contains the ID of the BCG
@@ -368,13 +385,14 @@ def savefits(cluslast,clusID):
     prj_fits_comb.writeto(f'{output}/{cluslast}/{snap}_{clusID}.fits', overwrite=True)
 
 
-
+    
 
 # Main code 
 
-for snap in range(1,31):
+# for snap in range(1,31):
     # save fits
-    with h5py.File(f"{output}clusters{snap}.hdf5", "r") as f:
+snap=1
+with h5py.File(f"{output}clusters{snap}.hdf5", "r") as f:
         savefits(0,0)        
 
                      

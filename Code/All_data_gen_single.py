@@ -14,7 +14,7 @@ import concurrent.futures
 
 # load up the parameter file
 parser = configparser.ConfigParser()
-parser.read('/home/jwyoo/WOC_SIDM/hr5_metallicity/params.ini')
+parser.read('/scratch/ankitsingh/Galaxy_catalogs/ICL_data/CEAGLE/Code/hr5_metallicity/params.ini')
 
 # clusfile = parser.get('Paths','clusfile')
 Fofd = parser.get('Paths','Fofdir')
@@ -261,10 +261,6 @@ def Make_hdf5(snapno,clusters):
 
 
 
-    # clusfile = f"{snapfiles}{snapno}.dat"
-    # clusters = pd.read_csv(clusfile,usecols=['HostHaloID'])
-    # clusters.sort_values('HostHaloID', inplace=True,ignore_index=True)
-
     with h5py.File(f"{outdir}/clusters{snapno}.hdf5", "a") as fout:
                 
                 if 'status' in fout:
@@ -307,12 +303,12 @@ def Make_hdf5(snapno,clusters):
 
                                             
                                                         
-                                else:   
-                                        #print("me here1",sline,hline)
-                                        skip_icl(fof_icl,file_back)
-                                        # print("me here2",sline,hline)
-                                        sline = skip_fof(sline,fof,file_fof)
-                                        # print("me here3",sline,hline)
+                                # else:   
+                                #         #print("me here1",sline,hline)
+                                #         skip_icl(fof_icl,file_back)
+                                #         # print("me here2",sline,hline)
+                                #         sline = skip_fof(sline,fof,file_fof)
+                                #         # print("me here3",sline,hline)
                                 
                                 hline = hline + 1 
                 
@@ -322,7 +318,8 @@ def Make_hdf5(snapno,clusters):
                         
 
 
-for snapno in range(1,31):
-    print(f"Processing Snapshot No. {snapno}")
-    Make_hdf5(snapno,np.array([0]))
+# for snapno in range(1,31):
+snapno=1
+print(f"Processing Snapshot No. {snapno}")
+Make_hdf5(snapno,np.array([0]))
 
