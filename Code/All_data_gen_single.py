@@ -133,13 +133,12 @@ def read_fof(fout,sline,hline,fof,file_fof):
                                             
     thalo={'nsub':data1[0],'ndm': data1[1],'nstar': data1[2],'nsink':data1[3],'ngas':data1[4],'npall':data1[5],'mtot':data1[6],'mdm':data1[7],'mgas':data1[8],'msink':data1[9],'mstar':data1[10],'pos':data1[11:14],'vel':data1[14:17]}
     
-    #print('Halo: ',thalo)
+    print('Halo: ',thalo)
                                             
     # Read subhaloes
     for i in tqdm.tqdm(range(thalo['nsub'])):
         data2 = unpack('@6i11d',file_fof.read(112))
-        tsub={'ndm':data2[0],'ngas':data2[1],'nsink': data2[2],'nstar':data2[3],'npall': data2[4],'dum':data2[5],'mtot':data2[6],'mdm':data2[7],'mgas':data2[8],'msink':data2[9],'mstar':data2[10],'pos':data2[11:14],'vel':data2[14:17]}
-
+        
         #print(f"In halo {i} subhalo: {tsub}\n")
         tsub={'ndm':data2[0],'ngas':data2[1],'nsink': data2[2],'nstar':data2[3],'npall': data2[4],'dum':data2[5],'mtot':data2[6],'mdm':data2[7],'mgas':data2[8],'msink':data2[9],'mstar':data2[10],'pos':data2[11:14],'vel':data2[14:17]}
 
@@ -294,10 +293,12 @@ def Make_hdf5(snapno,clusters):
                                 if clusters[kkk]==hline:
                                 
                                                 print(f"found cluster: {hline} in {snapno}")
-                                                print("Processing ICL") 
-                                                read_icl(fout,hline,fof_icl,file_back)
+                                                
                                                 print("Processing FOF")
                                                 sline = read_fof(fout,sline,hline,fof,file_fof)
+
+                                                print("Processing ICL") 
+                                                read_icl(fout,hline,fof_icl,file_back)
                                             
                                                 kkk=kkk+1
 

@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 # low information printing for yt
 # avoiding unnecessary information can save execution time 
-#yt.set_log_level(40)
+yt.set_log_level(40)
 
 
 import configparser
@@ -70,16 +70,21 @@ def cluster_projection(cluslast,clusID):
 # called from savefits function
 def make_fits(comp,proj,ds,width,res,kind):
 
-    print(ds.derived_field_list)
 
     prjpd_fits = yt.FITSParticleProjection(
-            ds, proj, (comp, "particle_mass"),density=True, deposition="ngp",length_unit='Mpc',image_res=[res,res],weight_field=None)
+            ds, proj, (comp, "particle_mass"),density=True, deposition="ngp",length_unit='Mpc',image_res=[res,res])
 
     prjpd_fits.change_image_name("particle_mass", f"{kind}_{comp}_density_{proj}")
 
-    prjpd_fits.update_header(f"{kind}_{comp}_density_{proj}", "scale", f"{width}/{res} Mpc/pixel")
+    # 2 factor as bounding box is -width to width
+
+    prjpd_fits.update_header(f"{kind}_{comp}_density_{proj}", "scale", f"{2*width}/{res} Mpc/pixel")
 
     prjpd_fits.set_unit(f"{kind}_{comp}_density_{proj}", "Msun/kpc**2")
+
+    
+
+    # print(f'kind {kind}, comp {comp}, proj {proj} mass {np.nansum(prjpd_fits[f"{kind}_{comp}_density_{proj}"].data)*scale**2:.2e}')
 
     return prjpd_fits
 
@@ -333,6 +338,7 @@ def savefits(cluslast,clusID):
         ("gas","particle_mass"): mgas
     }
 
+    print(data_all[("star","particle_mass")].sum())
     # get width that can encompass all particles
     res=1024
     width=0.2
@@ -353,7 +359,10 @@ def savefits(cluslast,clusID):
     ds_bcg = yt.load_particles(data_bcg, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
     ds_icl = yt.load_particles(data_icl, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
 
-
+    # print ds_all
+    ad = ds_all.all_data()
+    # print(f'particle star mass: {ad[("star","particle_mass")].to("Msun").sum():0.3e}')
+    
     all_img=[]
     for cm in ['star','dm','gas']:
 

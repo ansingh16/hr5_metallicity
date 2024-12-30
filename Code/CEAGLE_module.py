@@ -214,6 +214,7 @@ class Cluster:
 
         gal = Galaxy(self.snap, self.clusID)
         galids = self.get_galids()
+        galids.append('ICL')
 
         for galid in galids:
             galtmp = self.get_alldat_gal(galid)
@@ -339,7 +340,7 @@ class Cluster:
 
 
         # get width that can encompass all particles
-        res=1024
+        # res=1024
         width=2
         result = None
 
