@@ -319,8 +319,8 @@ def Make_hdf5(snapno,clusters):
                         
 
 
-# for snapno in range(1,31):
-snapno=1
-print(f"Processing Snapshot No. {snapno}")
-Make_hdf5(snapno,np.array([0]))
+for snapno in range(1,31):
+# snapno=1
+    print(f"Processing Snapshot No. {snapno}")
+    Make_hdf5(snapno,np.array([0]))
 
