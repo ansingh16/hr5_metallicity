@@ -8,7 +8,7 @@ import numpy as np
 
 # load up the parameter file
 parser = configparser.ConfigParser()
-parser.read('../params.ini')
+parser.read('../params_hr5.ini')
 
 outdir = parser.get('Paths','outdir')
 galcats = parser.get('Paths','galaxycats')

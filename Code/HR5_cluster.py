@@ -19,7 +19,7 @@ yt.mylog.setLevel(logging.ERROR)
 
 # load up the parameter file
 parser = configparser.ConfigParser()
-parser.read('../params.ini')
+parser.read('../params_hr5.ini')
 
 
 outdir = parser.get('Paths','outdir')
@@ -740,8 +740,9 @@ class Galaxy(Cluster):
         
         if half_mass_radius>0:
 
-            # fill 0 with nan because we take log
-            feh = [np.nan if x == 0 else x for x in feh]
+            # fill 0 with nan because we take log and converting mass ratio to number density for Aspund 2009 solar value
+            # calculations
+            feh = [np.nan if x == 0 else x*(1.008/55.845) for x in feh]
 
             # Normalize metallicity and calculate r/r_half
             gal_data = pd.DataFrame({
