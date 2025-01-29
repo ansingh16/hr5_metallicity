@@ -832,7 +832,7 @@ class Analysis:
         clusids: list
             List of cluster IDs corresponding to the galaxy IDs
         var: str
-            The variable to be used can be either 'met' or 'feh'
+            The variable to be used can be either 'met' or 'feh', 'sfr'
         dump: str
             Whether to dump the data or not possible values are False, True and load
         plot: str
@@ -844,6 +844,8 @@ class Analysis:
         
         # if data is not to be dumped load from {outdir}
         if use_cache:
+
+
             main_df = pd.read_json(f'{outdir}/Gradient_{var}_{self.snap}.json', orient='lines')
 
             # if feh is to be plotted
@@ -884,7 +886,7 @@ class Analysis:
                 self.median_gradient_met = pd.DataFrame({'median_Rg':median_Rg,'median_Zg':median_Zg,'median_Rs':median_Rs,'median_Zs':median_Zs})
 
 
-            
+          
 
         else :
 
@@ -895,6 +897,8 @@ class Analysis:
                 main_df = pd.DataFrame(columns=['ID','R_s','feh','slope_feh','std_e_feh'])
             elif var=='ofe':
                 main_df = pd.DataFrame(columns=['ID','R_s','ofe','slope_ofe','std_e_ofe'])
+            elif var=='sfr':
+                main_df = pd.DataFrame(columns=['ID','R_s','sfr','slope_sfr','std_e_sfr'])
 
             # Loop over the galaxy IDs and cluster IDs
             for galid,clusid in tqdm.tqdm(zip(galids,clusids),total=len(galids)):

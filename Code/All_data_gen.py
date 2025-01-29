@@ -8,8 +8,8 @@ import configparser
 # from parallelbar import progress_map
 import os 
 import sys 
-
-import concurrent.futures
+import tqdm
+import multiprocessing
 
 # load up the parameter file
 parser = configparser.ConfigParser()
@@ -86,6 +86,9 @@ def read_icl(fout,hline,fof_icl,file_back):
     massstar = np.empty(tsub['nstar'])
     velstar = np.empty((tsub['nstar'],3))
     zstar = np.empty(tsub['nstar'])
+    tpstar = np.empty(tsub['nstar'])
+    tppstar = np.empty(tsub['nstar'])
+
 
     if tsub['nstar']>0:
                                                     
@@ -101,7 +104,8 @@ def read_icl(fout,hline,fof_icl,file_back):
             velstar[j,:] = np.array(tstar['vel']) 
             massstar[j] = tstar['mass']
             zstar[j] = tstar['zp']
-                                    
+            tpstar[j] = tstar['tp']
+            tppstar[j] = tstar['tpp']                       
 
 
     # write positions of stars in subhalo
@@ -130,6 +134,11 @@ def read_icl(fout,hline,fof_icl,file_back):
     fout.create_dataset(f'{hline}/ICL/ogas',data=og)
     fout.create_dataset(f'{hline}/ICL/hgas',data=hg)
     fout.create_dataset(f'{hline}/ICL/zstar',data=zstar)
+
+    # time variable
+    fout.create_dataset(f'{hline}/ICL/tpstar',data=tpstar)
+    fout.create_dataset(f'{hline}/ICL/tppstar',data=tppstar)
+
 
     # write attributes   
     icl = fout[f'/{hline}/ICL/']
@@ -242,6 +251,8 @@ def read_fof(fout,sline,hline,fof,file_fof):
         massstar = np.empty(tsub['nstar'])
         velstar = np.empty((tsub['nstar'],3))
         zstar = np.empty(tsub['nstar'])
+        tpstar = np.empty(tsub['nstar'])
+        tppstar = np.empty(tsub['nstar'])
 
         if tsub['nstar']>0:
                                                         
@@ -256,7 +267,8 @@ def read_fof(fout,sline,hline,fof,file_fof):
                 velstar[j,:] = np.array(tstar['vel']) 
                 massstar[j] = tstar['mass']
                 zstar[j] = tstar['zp']
-                                        
+                tpstar[j] = tstar['tp']
+                tppstar[j] = tstar['tpp']                    
                                                     
                                                     
 
@@ -271,7 +283,6 @@ def read_fof(fout,sline,hline,fof,file_fof):
         fout.create_dataset(f'{hline}/{sline}/velgas',data=velg)
                                                     
         # Write mass
-
         fout.create_dataset(f'{hline}/{sline}/massstar',data=massstar/h0)
         fout.create_dataset(f'{hline}/{sline}/massdm',data=massdm/h0)
         fout.create_dataset(f'{hline}/{sline}/massgas',data=massg/h0)
@@ -287,7 +298,11 @@ def read_fof(fout,sline,hline,fof,file_fof):
         fout.create_dataset(f'{hline}/{sline}/hgas',data=hg)
         fout.create_dataset(f'{hline}/{sline}/zstar',data=zstar)
 
-                                                    
+
+        # time varaible
+        fout.create_dataset(f'{hline}/{sline}/tpstar',data=tpstar)
+        fout.create_dataset(f'{hline}/{sline}/tppstar',data=tppstar)
+
         # get cluster group
 
         clus = fout[f'/{hline}/']
@@ -356,8 +371,6 @@ def skip_fof(sline,fof,file_fof):
 
     return sline 
 
-# import random
-# import time
 
 
 def Make_hdf5(snapno):
@@ -448,42 +461,44 @@ def Make_hdf5(snapno):
 
 
 
-# files =  [filename for filename in os.listdir(snapfiles) if os.path.isfile(os.path.join(snapfiles, filename))]
+
+if __name__ == '__main__':
+    files =  [filename for filename in os.listdir(snapfiles) if os.path.isfile(os.path.join(snapfiles, filename))]
+    snaps = [os.path.splitext(file)[0] for file in files]
+
+    # reverse snaps
+    snaps.reverse()
+    
+    with multiprocessing.Pool(5) as pool:
+        pool.map(Make_hdf5, snaps)
+
+    # for snapno in tqdm.tqdm(snaps):
+    #     Make_hdf5(snapno)
 
 
+    # snapno = sys.argv[1]
+
+    # Make_hdf5(snapno)
 
 
-# snaps = [os.path.splitext(file)[0] for file in files]
+    # def process_snapshot(snapno):
+    #     Make_hdf5(snapno)
+    #     return snapno
+
+    # files =  [filename for filename in os.listdir(snapfiles) if os.path.isfile(os.path.join(snapfiles, filename))]
 
 
-
-# for snapno in tqdm.tqdm(snaps):
-#     Make_hdf5(snapno)
+    # snapshot_numbers = [105]#[os.path.splitext(file)[0] for file in files]
 
 
-snapno = sys.argv[1]
+    # # Output file path
+    # output_file_path = '../done_processing.txt'
 
-Make_hdf5(snapno)
+    # # Parallel execution using ProcessPoolExecutor
+    # with concurrent.futures.ThreadPoolExecutor(5) as executor:
+    #     results = list(executor.map(process_snapshot, snapshot_numbers))
 
-
-# def process_snapshot(snapno):
-#     Make_hdf5(snapno)
-#     return snapno
-
-# files =  [filename for filename in os.listdir(snapfiles) if os.path.isfile(os.path.join(snapfiles, filename))]
-
-
-# snapshot_numbers = [105]#[os.path.splitext(file)[0] for file in files]
-
-
-# # Output file path
-# output_file_path = '../done_processing.txt'
-
-# # Parallel execution using ProcessPoolExecutor
-# with concurrent.futures.ThreadPoolExecutor(5) as executor:
-#     results = list(executor.map(process_snapshot, snapshot_numbers))
-
-# # Writing the processed snapshot numbers to the output file
-# with open(output_file_path, 'a') as out:
-#     for snapno in results:
-#         out.write(f'{snapno}\n')
+    # # Writing the processed snapshot numbers to the output file
+    # with open(output_file_path, 'a') as out:
+    #     for snapno in results:
+    #         out.write(f'{snapno}\n')
