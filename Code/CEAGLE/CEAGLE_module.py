@@ -9,7 +9,7 @@ from scipy import stats
 from scipy.optimize import curve_fit
 import tqdm 
 import matplotlib.pyplot as plt
-plt.style.use('../paper_style.mplstyle')
+plt.style.use('../../paper_style.mplstyle')
 import logging
 import math
 
@@ -19,7 +19,7 @@ yt.mylog.setLevel(logging.ERROR)
 
 # load up the parameter file
 parser = configparser.ConfigParser()
-parser.read('../params.ini')
+parser.read('./params.ini')
 
 
 outdir = parser.get('Paths','outdir')
@@ -71,6 +71,10 @@ class Cluster:
         excess to the raw hdf5 file
     snap: int 
         snapshot number 
+    redshift: float
+        redshift of the snapshot
+    lbt: float
+        lookback time
 
     Methods
     -------
@@ -101,6 +105,7 @@ class Cluster:
         self.snap=snapno
         self.clusID=clusno
 
+        
         self.f = h5py.File(f"{outdir}clusters{self.snap}.hdf5", "r")
 
         self.bcgid = self._BCG_ID()
@@ -666,7 +671,46 @@ class Galaxy(Cluster):
         return half_mass_radius
 
 
+    def _center_of_mass(self, particle_type):
+        """
+        Compute the center of mass given positions and masses.
 
+        Parameters:
+        -----------
+        particle_type : str
+            The particle type to compute the center of mass for ('star', 'gas', or 'dm').
+        Returns:
+        --------
+        com : ndarray
+            3-element array representing the center of mass [x, y, z].
+        """
+
+        # Determine which attributes to use based on the particle type
+        if particle_type == 'star':
+            pos = self.star_pos_com[:]
+            mass = self.star_mass[:]
+        elif particle_type == 'gas':
+            pos = self.gas_pos_com[:]
+            mass = self.gas_mass[:]
+        elif particle_type == 'dm':
+            pos = self.dm_pos_com[:]
+            mass = self.dm_mass[:]    
+            
+        else:
+            raise ValueError("Invalid particle type. Choose from 'star', 'gas', or 'dm'.")
+
+        # Check array shapes
+        if pos.shape[0] != mass.shape[0]:
+            raise ValueError("Number of positions and masses must match!")
+
+        # Compute mass-weighted positions
+        weighted_positions = pos * mass[:, np.newaxis]
+
+        # Sum over all particles and normalize by total mass
+        total_mass = np.sum(mass)
+        com = np.sum(weighted_positions, axis=0) / total_mass
+
+        return com
     
     
     # function for metallicity gradient

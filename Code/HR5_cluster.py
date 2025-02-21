@@ -3,16 +3,13 @@ import numpy as np
 import configparser
 import re 
 import yt 
-import astropy.units as u
 import pandas as pd 
 from scipy import stats
-from scipy.optimize import curve_fit
 import tqdm 
 import matplotlib.pyplot as plt
 plt.style.use('../paper_style.mplstyle')
 import logging
-import math
-
+import pandas as pd 
 
 yt.mylog.setLevel(logging.ERROR)
 
@@ -23,7 +20,7 @@ parser.read('../params_hr5.ini')
 
 
 outdir = parser.get('Paths','outdir')
-h0 = float(parser.get('Setting','h0'))
+
 
 # Function to pad lists to the same length
 def pad_list(series):
@@ -70,8 +67,14 @@ class Cluster:
         velocity of the cluster in km/s 
     f: hdf5 file type
         excess to the raw hdf5 file
+    timedat: DataFrame
+        dataframe containing the snapnum,lookback time and redshift values
     snap: int 
-        snapshot number 
+        snapshot number
+    redshift: float
+        redshift of the snapshot
+    lbt: float
+        lookback time
 
     Methods
     -------
@@ -98,18 +101,42 @@ class Cluster:
         clusno : int
             cluster number
         """
-
+        # snapshot number
         self.snap=snapno
+        # cluster id
         self.clusID=clusno
 
+        # file object
         self.f = h5py.File(f"{outdir}clusters{self.snap}.hdf5", "r")
 
+        self.timedat = pd.read_csv('../Data/Time_data.csv')
+        # set redshift
+        self.redshift = self.timedat.loc[self.timedat['Snapshot']==self.snap,'Redshift'].values[0]
+        # set lookback time
+        self.lbt = self.timedat.loc[self.timedat['Snapshot']==self.snap,'LBT'].values[0]
+        # cosmology
+        self.h0 = float(parser.get('Setting','h0'))
+        self.Omega_m=float(parser.get('Setting','Omega_m'))
+        self.Omega_k=float(parser.get('Setting','Omega_k'))
+        self.Omega_l=float(parser.get('Setting','Omega_l'))
+
+        # age info
+        age_tmp = pd.read_csv('../Data/age_info.txt')
+        self._conformal_times = age_tmp['Conformal_time']
+        self._lookback_times = age_tmp['Look_back_time(Gyr)']
+
+                
+
+        # bcg id
         self.bcgid = self._BCG_ID()
 
+        # set attributes from hdf5 file
         attrs = self.f[f'/{self.clusID}/'].attrs
 
         for att in attrs.keys():
             setattr(self, f"clus_{att}",attrs[att]) 
+
+        
         
     def _BCG_ID(self):
         """
@@ -547,6 +574,7 @@ class Galaxy(Cluster):
         gal = self.get_alldat_gal(self.galID)
         #get variable list
         varbls=list(vars(gal))
+
         varbls = [x for x in varbls if re.search('_',x)]
         starvar = [var.replace('star_','') for var in varbls if re.search('star_',var)and (var[0]!=r'_')]
         gasvar = [var.replace('gas_','') for var in varbls if re.search('gas_',var)and (var[0]!=r'_')]
@@ -577,12 +605,15 @@ class Galaxy(Cluster):
                         if part=='star':
                             for var in var_s:
                                 data_dict[(f"{part}",f"{var}")] = getattr(glx,f'{part}_{var}')[:]
+                                if var=='tpp':
+                                    data_dict[(f"{part}",f"creation_time")] = getattr(glx,f'{part}_{var}')[:]
                         if part=='gas':
                             for var in var_g:
                                 data_dict[(f"{part}",f"{var}")] = getattr(glx,f'{part}_{var}')[:]
                         if part=='dm':
                             for var in var_d:
                                 data_dict[(f"{part}",f"{var}")] = getattr(glx,f'{part}_{var}')[:]
+        
         
 
         data_all = data_dict
@@ -666,9 +697,108 @@ class Galaxy(Cluster):
 
         return half_mass_radius
 
+    def _center_of_mass(self, particle_type):
+        """
+        Compute the center of mass given positions and masses.
+
+        Parameters:
+        -----------
+        particle_type : str
+            The particle type to compute the center of mass for ('star', 'gas', or 'dm').
+        Returns:
+        --------
+        com : ndarray
+            3-element array representing the center of mass [x, y, z].
+        """
+
+        # Determine which attributes to use based on the particle type
+        if particle_type == 'star':
+            pos = self.star_pos_com[:]
+            mass = self.star_mass[:]
+        elif particle_type == 'gas':
+            pos = self.gas_pos_com[:]
+            mass = self.gas_mass[:]
+        elif particle_type == 'dm':
+            pos = self.dm_pos_com[:]
+            mass = self.dm_mass[:]
+            
+        else:
+            raise ValueError("Invalid particle type. Choose from 'star', 'gas', or 'dm'.")
+
+        # Check array shapes
+        if pos.shape[0] != mass.shape[0]:
+            raise ValueError("Number of positions and masses must match!")
+
+        # Compute mass-weighted positions
+        weighted_positions = pos * mass[:, np.newaxis]
+
+        # Sum over all particles and normalize by total mass
+        total_mass = np.sum(mass)
+        com = np.sum(weighted_positions, axis=0) / total_mass
+
+        return com
+
+    def get_sfr_profile(self,radial_bins):
+         
+        yt_cosmo = yt.utilities.cosmology.Cosmology(hubble_constant=self.h0, omega_matter=self.Omega_m, omega_lambda=self.Omega_l)
+
+        # get yt dataset
+        ds = self.get_yt_dataset()
+
+        # galaxy stellar center
+        com = self._center_of_mass('star')
+
+        # galaxy half light radius
+        radius = self.rcom_star.max()*1000
+
+        # Define galaxy center and radius for SFR analysis
+        galaxy_center = [com[0], com[1], com[2]]  # Adjust based on galaxy position
+        galaxy_radius = (radius, "kpc")      # Analyze within 50 kpc
+
+        # Time interval for SFR calculation (e.g., 100 Myr)
+        dt = 0.1  # Gyr
+
+        # Create a sphere around the galaxy
+        sp = ds.sphere(galaxy_center, galaxy_radius)
+
+        # Example: tp array from the dataset (negative for stellar particles)
+        tp = sp[("star", "creation_time")].value  # Conformal time (negative for stars)
+        stellar_mass = sp[("star", "particle_mass")].in_units('Msun')
 
 
-    
+        # Step 2: Ensure conformal_times are sorted for interpolation
+        sorted_indices = np.argsort(self._conformal_times)
+        conformal_times_sorted = self._conformal_times[sorted_indices]
+        lookback_times_sorted = self._lookback_times[sorted_indices]
+
+        # Step 3: Interpolate tp_abs to get look-back time
+        lookback_time = np.interp(tp, conformal_times_sorted, lookback_times_sorted)
+
+        # Step 4: Compute Proper Formation Time (tpp)
+        # Assuming Universe age is ~13.8 Gyr
+        tpp = 13.8 - lookback_time  # Proper time in Gyr
+
+        # Step 5: Calculate Stellar Age
+        simtime = yt_cosmo.t_from_z(self.redshift).in_units('Gyr').value  # Current simulation time
+        stellar_age = simtime - tpp  # Age in Gyr
+
+        # Select young stars formed in the last dt Gyr
+        young_mask = stellar_age < dt
+        young_star_mass = stellar_mass[young_mask]
+        young_star_pos = sp[("star", "particle_position")][young_mask]
+
+        
+        # Compute distances from galaxy center
+        galaxy_center_coords = ds.arr(galaxy_center, "code_length").to("kpc")
+        radii = np.sqrt(((young_star_pos - galaxy_center_coords)**2).sum(axis=1)).in_units('kpc')
+
+       
+        # Compute SFR in each radial bin
+        sfr_profile, bin_edges = np.histogram(radii, bins=radial_bins, weights=young_star_mass)
+        sfr_profile /= (dt * 1e9)  # Convert to Msun/yr from Gyr
+
+        return sfr_profile
+
     
     # function for metallicity gradient
     def get_metal_slope(self, r_rhalf_max=2, r_bin_width=0.1, var=None):
@@ -1083,41 +1213,44 @@ class Analysis:
             return axes
 
                 
-    def get_variable_allgal(self,galids,clusids):
+    # def get_variable_allgal(self,galids,clusids):
 
        
 
-        main_df = []
+    #     main_df = []
 
-        # Loop over the galaxy IDs and cluster IDs
-        for galid,clusid in tqdm.tqdm(zip(galids,clusids),total=len(galids)): 
-                clus = Cluster(self.snap,clusid)
-                gal = clus.get_alldat_gal(galid)
+    #     # Loop over the galaxy IDs and cluster IDs
+    #     for galid,clusid in tqdm.tqdm(zip(galids,clusids),total=len(galids)): 
+    #             clus = Cluster(self.snap,clusid)
+    #             gal = clus.get_alldat_gal(galid)
 
-                # get metallicity gradient only for galaxy with gas
-                if gal.gal_mgas>0:
+    #             # get metallicity gradient only for galaxy with gas
+    #             if gal.gal_mgas>0:
                     
-                        # get weighted mean of feh
-                        feh = gal.gas_fe[:]/gal.gas_h[:]
-                        mean_feh = np.nanmedian(feh)
+    #                     # get weighted mean of feh
+    #                     feh = gal.gas_fe[:]/gal.gas_h[:]
+    #                     mean_feh = np.nanmedian(feh)
 
-                        mean_feh = np.log10(mean_feh) + 4.5
+    #                     mean_feh = np.log10(mean_feh) + 4.5
 
-                        # get weighted mean of feh
-                        ofe = gal.gas_o[:]/gal.gas_fe[:]
-                        mean_ofe = np.nanmedian(ofe)
+    #                     # get weighted mean of feh
+    #                     ofe = gal.gas_o[:]/gal.gas_fe[:]
+    #                     mean_ofe = np.nanmedian(ofe)
 
-                        mean_ofe = 1.5 + np.log10(mean_ofe) 
+    #                     mean_ofe = 1.5 + np.log10(mean_ofe) 
 
-                        main_df.append({'clusid':clus.clusID,'galid':gal.galID,'mean_ofe':mean_ofe,'mean_feh':mean_feh})
+    #                     main_df.append({'clusid':clus.clusID,'galid':gal.galID,'mean_ofe':mean_ofe,'mean_feh':mean_feh})
                         
 
                          
                 
-        # convert to dataframe
-        main_df = pd.DataFrame(main_df)         
+    #     # convert to dataframe
+    #     main_df = pd.DataFrame(main_df)         
 
-        return main_df
+    #     return main_df
+
+
+        
 
 
             

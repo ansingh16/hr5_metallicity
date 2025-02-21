@@ -3,12 +3,11 @@ import pandas as pd
 import h5py
 import yt 
 import tqdm
+import CEAGLE_module as ceg
 
 # low information printing for yt
 # avoiding unnecessary information can save execution time 
 yt.set_log_level(40)
-
-
 
 
 
@@ -19,11 +18,13 @@ yt.set_log_level(40)
 def make_fits(comp,proj,ds,width,res,kind,snap):
 
     
-    
     # read the virial radius and make a sphere
     r200_snap = r200.loc[r200['snapshot'] == snap,'R200'].values[0]
+
+    # print(f"R200 for snap {snap} is {r200_snap}")
+    bcg_center = [0,0,0]#gal.clus_pos - gal.gal_pos
     # sphere yt region
-    sphere = ds.sphere([0, 0, 0], (r200_snap, "Mpc"))
+    sphere = ds.sphere(bcg_center, (r200_snap, "Mpc"))
 
     # make the fits file for a given projection and component
     prjpd_fits = yt.FITSParticleProjection(
@@ -308,7 +309,7 @@ def savefits(snap,cluslast,clusID):
                 prjs = make_fits(cm,proj,ds_all,width,res,'all',snap)
                 all_img.append(prjs)
             except:
-                out.write(f"could not make 'all' projection for snap {snap} and component {cm} and projection {proj}\n")
+                print(f"could not make 'all' projection for snap {snap} and component {cm} and projection {proj}\n")
 
             # print(cm,proj,"M here bcg")
             try:
@@ -316,21 +317,21 @@ def savefits(snap,cluslast,clusID):
                 prjs = make_fits(cm,proj,ds_bcg,width,res,'bcg',snap)
                 all_img.append(prjs)
             except:
-                out.write(f"could not make 'bcg' projection for snap {snap} and component {cm} and projection {proj}\n")
+                print(f"could not make 'bcg' projection for snap {snap} and component {cm} and projection {proj}\n")
 
             try:    
                 # print(cm,proj,"M here rest")
                 prjs = make_fits(cm,proj,ds_rest,width,res,'rest',snap)
                 all_img.append(prjs)
             except:
-                out.write(f"could not make 'rest' projection for snap {snap} and component {cm} and projection {proj}\n")
+                print(f"could not make 'rest' projection for snap {snap} and component {cm} and projection {proj}\n")
 
             try:
                 # print(cm,proj,"M here icl")
                 prjs = make_fits(cm,proj,ds_icl,width,res,'ICL',snap)
                 all_img.append(prjs)
             except:
-                out.write(f"could not make 'icl' projection for snap {snap} and component {cm} and projection {proj}\n")
+                print(f"could not make 'icl' projection for snap {snap} and component {cm} and projection {proj}\n")
 
 
 
@@ -339,30 +340,29 @@ def savefits(snap,cluslast,clusID):
     prj_fits_comb.writeto(f'{output}/{cluslast}/{snap}_{clusID}_r200.fits', overwrite=True)
 
 
-with open('./uncompleted.txt', 'w') as out:
-        
-    # loop for cosmology
-    for cos in ['SIDM','CDM']:
-                
-        for halo in ['05','12']:
+
+cos='CDM'
+halo='12'
+
+output = f'/scratch/ankitsingh/Galaxy_catalogs/ICL_data/CEAGLE/Data/Output/{cos}/halo{halo}/'
+
+r200 = f'/scratch/ankitsingh/Galaxy_catalogs/ICL_data/CEAGLE/Data/test/CE{int(halo)}_{cos.lower()}_z.dat'
+
+r200 = pd.read_csv(r200,skiprows=1,names=['snapshot' ,'groupnr' ,'subgroupnr' ,'CoP_x' ,'CoP_y', 'CoP_z' ,'R200', 'vx_CoP' ,'vy_CoP' ,'vz_CoP' \
+                                ,'redshift' ,'lookbacktime'],sep=' ')[['R200']]
 
 
-            output = f'/scratch/ankitsingh/Galaxy_catalogs/ICL_data/CEAGLE/Data/Output/{cos}/halo{halo}/'
+r200['snapshot'] = range(1,31)
 
-            r200 = f'/scratch/ankitsingh/Galaxy_catalogs/ICL_data/CEAGLE/Data/test/CE{int(halo)}_{cos.lower()}_z.dat'
-
-            r200 = pd.read_csv(r200,skiprows=1,names=['snapshot' ,'groupnr' ,'subgroupnr' ,'CoP_x' ,'CoP_y', 'CoP_z' ,'R200', 'vx_CoP' ,'vy_CoP' ,'vz_CoP' \
-                                ,'redshift' ,'lookbacktime'],sep=' ')[['snapshot','R200']]
-
-            r200['R200'] = r200['R200'].iloc[::-1]
-
-            r200['snapshot'] = r200['snapshot'] + 1
-
-            
-            # Main code 
-            for snap in tqdm.tqdm(range(1,31)):
+# Main code 
+for snap in range(1,31):
+                print(f"working on snap {snap} for halo {halo} for cosmo {cos}")
                 # save fits
                 with h5py.File(f"{output}clusters{snap}.hdf5", "r") as f:
+
+                    clusid = 0
+                    clus = ceg.Cluster(1,clusid)
+                    gal = clus.get_alldat_gal(clus.bcgid)
 
                     savefits(snap,0,0)        
                     
