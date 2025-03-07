@@ -738,8 +738,27 @@ class Galaxy(Cluster):
 
         return com
 
-    def get_sfr_profile(self,radial_bins):
-         
+    def get_sfr_profile(self,r_rhalf_max=2, r_bin_width=0.1):
+        """
+        Compute the star formation rate (SFR) profile of the galaxy.
+
+        Parameters:
+        -----------
+        radial_bins : list
+            Number of radial bins scaled with half mass radius for the SFR profile.
+
+        Returns:
+        --------
+        sfr_profile : ndarray
+            1D array representing the SFR in Msun/yr.
+        """
+
+        radial_bins = np.arange(0, r_rhalf_max, r_bin_width)
+        
+        # Get half-mass radius in kpc and select metallicity and distance arrays based on particle type
+        half_mass_radius = self._half_mass_radius('star')*1000 
+
+        # get cosmology
         yt_cosmo = yt.utilities.cosmology.Cosmology(hubble_constant=self.h0, omega_matter=self.Omega_m, omega_lambda=self.Omega_l)
 
         # get yt dataset
@@ -792,12 +811,15 @@ class Galaxy(Cluster):
         galaxy_center_coords = ds.arr(galaxy_center, "code_length").to("kpc")
         radii = np.sqrt(((young_star_pos - galaxy_center_coords)**2).sum(axis=1)).in_units('kpc')
 
-       
+        
         # Compute SFR in each radial bin
-        sfr_profile, bin_edges = np.histogram(radii, bins=radial_bins, weights=young_star_mass)
+        sfr_profile, bin_edges = np.histogram(radii/half_mass_radius, bins=radial_bins, weights=young_star_mass)
         sfr_profile /= (dt * 1e9)  # Convert to Msun/yr from Gyr
 
-        return sfr_profile
+        # Compute bin centers for plotting
+        bin_centers = 0.5 * (radial_bins[:-1] + radial_bins[1:])
+
+        return bin_centers,sfr_profile
 
     
     # function for metallicity gradient
@@ -828,7 +850,7 @@ class Galaxy(Cluster):
             # Normalize metallicity and calculate r/r_half
             gal_data = pd.DataFrame({
                 'r_rhalf': dist / half_mass_radius,
-                var: met / 0.02
+                var: met / 0.02 # 0.02 is the solar metallicity
             })
 
             
@@ -849,7 +871,32 @@ class Galaxy(Cluster):
 
         else:
              return np.nan, np.nan, np.nan, np.nan
+    
+    # function for metallicity gradient
+    def get_sfr_slope(self, bin_centers,sfr_profile):
+        """
+        Parameters
+        ----------
+        radial_bins: float
+            list of distance bins
+        sfr: float
+            sfr in each bin
+        """
+
+       # Normalize metallicity and calculate r/r_half
+        gal_data = pd.DataFrame({
+                'r_rhalf':  bin_centers,
+                'sfr': sfr_profile 
+        })
+
         
+            
+        slope, _, _, _, std_err = stats.linregress(gal_data['r_rhalf'], gal_data['sfr'])
+            
+        
+        return gal_data['r_rhalf'].values, gal_data['sfr'].values, slope, std_err
+
+       
         
 
 
@@ -955,6 +1002,7 @@ class Analysis:
     
     def get_slope_data(self,galids=None,clusids=None,rmax=4,rbin_width=0.1,var='met',dump_data=False,use_cache=True):
         """
+        Func
         Parameters
         ----------
         galids: list
@@ -999,6 +1047,16 @@ class Analysis:
                 
                 self.median_gradient_ofe = pd.DataFrame({'median_Rg':median_Rg,'median_ofe':median_ofe})
 
+            # if sfr is to be plotted
+            if var == 'sfr':         
+                # Save DataFrame to JSON file
+                slope_df = main_df[main_df['R_s'].notna()]
+                median_Rs = median_list_column(slope_df['R_s'])
+                median_sfr = median_list_column(slope_df['sfr'])
+
+                
+                self.median_gradient_sfr = pd.DataFrame({'median_Rs':median_Rs,'median_sfr':median_sfr})
+
                 
 
             # if metallicity is to be plotted
@@ -1016,7 +1074,6 @@ class Analysis:
                 self.median_gradient_met = pd.DataFrame({'median_Rg':median_Rg,'median_Zg':median_Zg,'median_Rs':median_Rs,'median_Zs':median_Zs})
 
 
-          
 
         else :
 
@@ -1076,6 +1133,15 @@ class Analysis:
                        
                         # append the main_df
                         main_df = main_df.append({'ID':galid,'clusID':clusid,'R_s':R_s,'Z_s':Z_s,'slope_s':slope_s,'std_e_s':std_e_s,'R_g':R_g,'Z_g':Z_g,'slope_g':slope_g,'std_e_g':std_e_g},ignore_index=True)
+
+                    elif var == 'sfr':
+                        
+                        R_s,sfr,slope_sfr,std_e_sfr = gal.get_sfr_profile(rmax,rbin_width)
+
+                       
+                        # append the main_df
+                        main_df = main_df.append({'ID':galid,'clusID':clusid,'R_s':R_s,'sfr':sfr,'slope_sfr':slope_sfr,'std_e_sfr':std_e_sfr},\
+                                                  ignore_index=True)
             
 
 
@@ -1116,6 +1182,17 @@ class Analysis:
 
                 self.median_gradient_met = pd.DataFrame({'median_Rg':median_Rg,'median_Zg':median_Zg,'median_Rs':median_Rs,'median_Zs':median_Zs})
 
+
+
+            # if ofe is to be plotted
+            if var == 'sfr':         
+                # Save DataFrame to JSON file
+                slope_df = main_df[main_df['R_s'].notna()]
+                median_Rs = median_list_column(slope_df['R_s'])
+                median_sfr = median_list_column(slope_df['sfr'])
+                self.median_gradient_ofe = pd.DataFrame({'median_Rs':median_Rs,'median_sfr':median_sfr})
+
+
             if dump_data==True:
                 main_df.to_json(f'{outdir}/Gradient_{var}_{self.snap}.json',orient='records')
             
@@ -1125,6 +1202,8 @@ class Analysis:
             self.median_slope_feh = main_df['slope_feh'].median()
         if var == 'ofe':
             self.median_slope_ofe = main_df['slope_ofe'].median()
+        if var == 'sfr':
+            self.median_slope_sfr = main_df['slope_sfr'].median()
         elif var == 'met':
             self.median_slope_Zs = main_df['slope_s'].median()
             self.median_slope_Zg = main_df['slope_g'].median()
@@ -1200,6 +1279,29 @@ class Analysis:
                     ax.set_xlabel(r'$\mathrm{R/R_{\mathrm{half}}}$')
                     ax.set_ylabel(r'$\mathrm{[Fe/H]}$')
                     ax.legend()
+
+        
+        elif var == 'sfr':
+                    # plot for feh
+                    for i in tqdm.tqdm(range(len(self.slope_df))):
+
+                        R_s = self.slope_df['R_s'].iloc[i]
+                        sfr = self.slope_df['sfr'].iloc[i]
+
+                        # check if R_g list or numpy array
+                        if isinstance(R_s, np.ndarray) or isinstance(R_s, list):
+
+                            if plot_gal:
+                                ax.plot(R_s, sfr, color='grey', alpha=0.1)
+
+
+
+                    ax.plot(self.median_gradient_sfr.median_Rs,self.median_gradient_sfr.median_sfr,marker='o',markersize=8,label='Median SFR')
+
+                    ax.set_xlabel(r'$\mathrm{R/R_{\mathrm{half}}}$')
+                    ax.set_ylabel(r'$\mathrm{SFR \ (M_{\odot} yr^{-1})}$')
+                    ax.legend()
+
 
 
         if save and ax is None:    

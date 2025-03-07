@@ -197,6 +197,8 @@ class Cluster:
             gal = Galaxy(self.snap,self.clusID,galist)
             
             for part in ['gas','star','dm']:
+
+                print(f"Getting the {part} particles")
                             
                 vars=list(self.f[f'/{self.clusID}/{galist}/'].keys())
                 partvar = [var for var in vars if re.search(part, var)]
@@ -574,6 +576,9 @@ class Galaxy(Cluster):
         #     par_types = ['star','dm']
 
         for part in ['gas','star','dm']:
+                        
+                        print(f"\rProcessing particle type {part}")
+
                         data_dict[(f"{part}","particle_mass")] = getattr(glx,f'{part}_mass')[:]
                         for i,dir in enumerate(['x','y','z']):
                             data_dict[(f"{part}",f"particle_position_{dir}")] = getattr(glx,f'{part}_pos_com')[:,i]
@@ -598,6 +603,11 @@ class Galaxy(Cluster):
             width = 0.2
         result = None
 
+        for part in ['gas','star','dm']:
+             
+            print(data_all[(part, 'particle_position_x')].min(),data_all[(part, 'particle_position_x')].max())
+            print(data_all[(part, 'particle_position_y')].min(),data_all[(part, 'particle_position_y')].max())
+            print(data_all[(part, 'particle_position_z')].min(),data_all[(part, 'particle_position_z')].max())
         # Loop to encompass all the particles in the domain
         while result is None:
             try:
@@ -605,7 +615,9 @@ class Galaxy(Cluster):
                     bbox = np.array([[-width,width], [-width, width], [-width, width]])
                     ds_all = yt.load_particles(data_all, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
                     result = yt.ParticleProjectionPlot(ds_all,'x',("star","particle_mass"))
+                    print(result)
             except:        
+                    
                     width=width+0.2
         
         # bounding box final
