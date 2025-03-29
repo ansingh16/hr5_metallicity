@@ -30,8 +30,11 @@ def pad_list(series):
 # Compute the element-wise median with padding
 def median_list_column(series):
     padded_array = pad_list(series)
+    
+    # Convert None values to NaN
+    padded_array = np.array(padded_array, dtype=np.float64)  # Ensures numerical dtype
+    
     return np.nanmedian(padded_array, axis=0)
-
 
 
 class Cluster:
@@ -591,13 +594,14 @@ class Galaxy(Cluster):
         # dictionary to fill the data
         data_dict = {} 
         
-        # Loop over the particle types and fill the data dictionary
-        # if self.gas_mass>0:
-        #     par_types = ['gas','star','dm']
-        # else:
-        #     par_types = ['star','dm']
+        # get existing particles
+        part_exist = [part for part in ['gas','star','dm'] if getattr(glx,f'{part}_mass').shape[0]>0]
 
-        for part in ['gas','star','dm']:
+        # loop over the particles        
+        for part in part_exist:
+                        
+                        # fill the data only if the particles exit
+
                         data_dict[(f"{part}","particle_mass")] = getattr(glx,f'{part}_mass')[:]
                         for i,dir in enumerate(['x','y','z']):
                             data_dict[(f"{part}",f"particle_position_{dir}")] = getattr(glx,f'{part}_pos_com')[:,i]
@@ -628,11 +632,12 @@ class Galaxy(Cluster):
         # Loop to encompass all the particles in the domain
         while result is None:
             try:
-                    
+                   
                     bbox = np.array([[-width,width], [-width, width], [-width, width]])
                     ds_all = yt.load_particles(data_all, length_unit='Mpc', mass_unit='Msun', bbox=bbox)
+                    
                     result = yt.ParticleProjectionPlot(ds_all,'x',("star","particle_mass"))
-            except:        
+            except:
                     width=width+0.2
         
         # bounding box final
@@ -761,8 +766,12 @@ class Galaxy(Cluster):
         # get cosmology
         yt_cosmo = yt.utilities.cosmology.Cosmology(hubble_constant=self.h0, omega_matter=self.Omega_m, omega_lambda=self.Omega_l)
 
+        # print('M in sfr profile before ds')
+
         # get yt dataset
         ds = self.get_yt_dataset()
+
+        # print('M in sfr profile before ds 2')
 
         # galaxy stellar center
         com = self._center_of_mass('star')
@@ -783,7 +792,6 @@ class Galaxy(Cluster):
         # Example: tp array from the dataset (negative for stellar particles)
         tp = sp[("star", "creation_time")].value  # Conformal time (negative for stars)
         stellar_mass = sp[("star", "particle_mass")].in_units('Msun')
-
 
         # Step 2: Ensure conformal_times are sorted for interpolation
         sorted_indices = np.argsort(self._conformal_times)
@@ -813,7 +821,7 @@ class Galaxy(Cluster):
 
         
         # Compute SFR in each radial bin
-        sfr_profile, bin_edges = np.histogram(radii/half_mass_radius, bins=radial_bins, weights=young_star_mass)
+        sfr_profile, _ = np.histogram(radii/half_mass_radius, bins=radial_bins, weights=young_star_mass)
         sfr_profile /= (dt * 1e9)  # Convert to Msun/yr from Gyr
 
         # Compute bin centers for plotting
@@ -886,9 +894,11 @@ class Galaxy(Cluster):
        # Normalize metallicity and calculate r/r_half
         gal_data = pd.DataFrame({
                 'r_rhalf':  bin_centers,
-                'sfr': sfr_profile 
+                'sfr': np.log10(sfr_profile) 
         })
 
+        # drop nan before fitting the line
+        gal_data = gal_data[gal_data['sfr'].notna()]
         
             
         slope, _, _, _, std_err = stats.linregress(gal_data['r_rhalf'], gal_data['sfr'])
@@ -999,6 +1009,11 @@ class Analysis:
         self.median_gradient_feh = None
         self.median_slope_Zg = None
         self.median_slope_Zs = None
+        self.median_slope_sfr = None
+        self.median_gradient_ofe = None
+        self.median_slope_ofe = None
+        self.median_gradient_sfr = None
+        
     
     def get_slope_data(self,galids=None,clusids=None,rmax=4,rbin_width=0.1,var='met',dump_data=False,use_cache=True):
         """
@@ -1051,6 +1066,7 @@ class Analysis:
             if var == 'sfr':         
                 # Save DataFrame to JSON file
                 slope_df = main_df[main_df['R_s'].notna()]
+
                 median_Rs = median_list_column(slope_df['R_s'])
                 median_sfr = median_list_column(slope_df['sfr'])
 
@@ -1135,8 +1151,12 @@ class Analysis:
                         main_df = main_df.append({'ID':galid,'clusID':clusid,'R_s':R_s,'Z_s':Z_s,'slope_s':slope_s,'std_e_s':std_e_s,'R_g':R_g,'Z_g':Z_g,'slope_g':slope_g,'std_e_g':std_e_g},ignore_index=True)
 
                     elif var == 'sfr':
+
                         
-                        R_s,sfr,slope_sfr,std_e_sfr = gal.get_sfr_profile(rmax,rbin_width)
+                        # print(f'M here {galid}, {clusid}')
+                        bin_centers,sfr_profile = gal.get_sfr_profile(rmax,rbin_width)
+
+                        R_s,sfr,slope_sfr,std_e_sfr = gal.get_sfr_slope(bin_centers,sfr_profile)
 
                        
                         # append the main_df
@@ -1190,7 +1210,7 @@ class Analysis:
                 slope_df = main_df[main_df['R_s'].notna()]
                 median_Rs = median_list_column(slope_df['R_s'])
                 median_sfr = median_list_column(slope_df['sfr'])
-                self.median_gradient_ofe = pd.DataFrame({'median_Rs':median_Rs,'median_sfr':median_sfr})
+                self.median_gradient_sfr = pd.DataFrame({'median_Rs':median_Rs,'median_sfr':median_sfr})
 
 
             if dump_data==True:

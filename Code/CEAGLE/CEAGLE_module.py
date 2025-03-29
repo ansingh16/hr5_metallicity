@@ -11,18 +11,11 @@ import tqdm
 import matplotlib.pyplot as plt
 plt.style.use('../../paper_style.mplstyle')
 import logging
-import math
-
+import os
 
 yt.mylog.setLevel(logging.ERROR)
 
 
-# load up the parameter file
-parser = configparser.ConfigParser()
-parser.read('./params.ini')
-
-
-outdir = parser.get('Paths','outdir')
 
 # Function to pad lists to the same length
 def pad_list(series):
@@ -90,7 +83,7 @@ class Cluster:
 
     """
 
-    def __init__(self,snapno,clusno):
+    def __init__(self,outdir,snapno,clusno):
         """
         Construct all necessary attributes for a cluster.
 
@@ -104,8 +97,9 @@ class Cluster:
 
         self.snap=snapno
         self.clusID=clusno
-
         
+        self.outdir=outdir
+
         self.f = h5py.File(f"{outdir}clusters{self.snap}.hdf5", "r")
 
         self.bcgid = self._BCG_ID()
@@ -179,7 +173,7 @@ class Cluster:
             outgal=[]
             for galid in galist:
                 # print(f"\rProcessing galaxy {galid}", end='')
-                gal = Galaxy(self.snap,self.clusID,galid)
+                gal = Galaxy(self.outdir, self.snap, self.clusID,galid)
                 
                 for part in ['gas','star','dm']:
                             
@@ -194,7 +188,7 @@ class Cluster:
         else:
             # here galist is an int
             # print(f"\rProcessing galaxy {galist}", end='')
-            gal = Galaxy(self.snap,self.clusID,galist)
+            gal = Galaxy(self.outdir, self.snap, self.clusID,galist)
             
             for part in ['gas','star','dm']:
 
@@ -219,7 +213,7 @@ class Cluster:
             Galaxy: An instance of the Galaxy class containing all parts of the specified type.
         """
 
-        gal = Galaxy(self.snap, self.clusID)
+        gal = Galaxy(self.outdir, self.snap, self.clusID)
         galids = self.get_galids()
         galids.append('ICL')
 
@@ -449,16 +443,12 @@ class Galaxy(Cluster):
         array of stellar particle metallicty 
     
     """
-    def __init__(self,snap,clusID,galid=None):
-            super().__init__(snap,clusID)
+    def __init__(self, outdir, snap, clusID, galid=None):
+            super().__init__(outdir, snap, clusID)  # Call parent constructor
 
             """
             Parameters
             ----------
-            snap: int
-                snapshot
-            clusID: int
-                cluster ID
             galid: int
                 galaxy ID
             """

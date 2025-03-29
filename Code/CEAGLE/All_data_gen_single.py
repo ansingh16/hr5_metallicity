@@ -17,8 +17,8 @@ parser = configparser.ConfigParser()
 parser.read('/scratch/ankitsingh/Galaxy_catalogs/ICL_data/CEAGLE/Code/hr5_metallicity/params.ini')
 
 # clusfile = parser.get('Paths','clusfile')
-Fofd = parser.get('Paths','Fofdir')
-outdir = parser.get('Paths','outdir')
+# Fofd = parser.get('Paths','Fofdir')
+# outdir = parser.get('Paths','outdir')
 
 
 def read_icl(fout,hline,fof_icl,file_back):
@@ -260,7 +260,7 @@ def Make_hdf5(snapno,clusters):
 
 
 
-    with h5py.File(f"{outdir}/clusters{snapno}.hdf5", "a") as fout:
+    with h5py.File(f"./clusters{snapno}_new.hdf5", "a") as fout:
                 
                 if 'status' in fout:
                     del fout['status']
@@ -318,9 +318,19 @@ def Make_hdf5(snapno,clusters):
                 
                         
 
+for cos in ['SIDM']:#,'CDM']:
+    for halo in ['05']:#,'12']:
 
-for snapno in range(1,31):
-# snapno=1
-    print(f"Processing Snapshot No. {snapno}")
-    Make_hdf5(snapno,np.array([0]))
+        Fofd=f'/scratch/ankitsingh/Galaxy_catalogs/ICL_data/CEAGLE/Data/{cos}_new/halo{halo}/FoF_Data/'
+        outdir = f'/scratch/ankitsingh/Galaxy_catalogs/ICL_data/CEAGLE/Data/Output_new/{cos}/halo{halo}/'
+
+        # check if the directory exists
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+            
+        print(f'Working on halo {halo} for cosmo {cos}')
+        for snapno in [1]:#range(1,31):
+        # snapno=1
+            print(f"Processing Snapshot No. {snapno}")
+            Make_hdf5(snapno,np.array([0]))
 
