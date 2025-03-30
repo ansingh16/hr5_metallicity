@@ -260,7 +260,7 @@ def Make_hdf5(snapno,clusters):
 
 
 
-    with h5py.File(f"./clusters{snapno}_new.hdf5", "a") as fout:
+    with h5py.File(f"{outdir}/clusters{snapno}.hdf5", "a") as fout:
                 
                 if 'status' in fout:
                     del fout['status']
@@ -318,8 +318,8 @@ def Make_hdf5(snapno,clusters):
                 
                         
 
-for cos in ['SIDM']:#,'CDM']:
-    for halo in ['05']:#,'12']:
+for cos in ['SIDM','CDM']:
+    for halo in ['05','12']:
 
         Fofd=f'/scratch/ankitsingh/Galaxy_catalogs/ICL_data/CEAGLE/Data/{cos}_new/halo{halo}/FoF_Data/'
         outdir = f'/scratch/ankitsingh/Galaxy_catalogs/ICL_data/CEAGLE/Data/Output_new/{cos}/halo{halo}/'
@@ -329,7 +329,7 @@ for cos in ['SIDM']:#,'CDM']:
             os.makedirs(outdir)
             
         print(f'Working on halo {halo} for cosmo {cos}')
-        for snapno in [1]:#range(1,31):
+        for snapno in range(1,31):
         # snapno=1
             print(f"Processing Snapshot No. {snapno}")
             Make_hdf5(snapno,np.array([0]))

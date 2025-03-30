@@ -144,7 +144,7 @@ def savefits(cluslast,clusID):
                 mostmass = f[f'/{clusID}/{gal}'].attrs['mstar']
                 mid = gal 
             #print(mid,mostmass)
-        # totmass = totmass + f[f'/{clusID}/ICL'].attrs['mstar']
+        totmass = totmass + f[f'/{clusID}/ICL'].attrs['mstar']
         print(f"Total mass of cluster: {np.log10(totmass)} and cluster mstar: {np.log10(f[f'/{clusID}/'].attrs['mstar'])}")
         print('mid at end: ',mid)
 
@@ -365,13 +365,13 @@ def savefits(cluslast,clusID):
     
 
 
-cos='SIDM'
-halo='05'
+cos='CDM'
+halo='12'
 print(f'Processing halo {halo} for cosmo {cos}')
 output = f'/scratch/ankitsingh/Galaxy_catalogs/ICL_data/CEAGLE/Data/Output_new/{cos}/halo{halo}/'
 # Main code 
 
-for snap in range(1,2):#,31):
+for snap in range(1,31):
     # save fits
     with h5py.File(f"{output}clusters{snap}.hdf5", "r") as f:
             try:    
