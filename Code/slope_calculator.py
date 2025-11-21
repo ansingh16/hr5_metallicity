@@ -42,13 +42,16 @@ def process_snap(snap):
 
     Ana.get_slope_data(galids=e_galaxies.index,clusids=e_galaxies.clusID,rmax=4,rbin_width=0.3,var='met',dump_data=True,use_cache=False)
 
+    Ana.get_slope_data(galids=e_galaxies.index,clusids=e_galaxies.clusID,rmax=4,rbin_width=0.3,var='sfr',dump_data=True,use_cache=False)
+
     slope_median_Zs = Ana.median_slope_Zs
     slope_median_Zg = Ana.median_slope_Zg
+    slope_median_SFR = Ana.median_slope_sfr
 
     
     Ana.slope_df.to_json(f'{outdir}/Slope_met_{snap}.json')
 
-    return snap,slope_median_feh,slope_median_Zs,slope_median_Zg
+    return snap,slope_median_feh,slope_median_Zs,slope_median_Zg,slope_median_SFR
 
 
 # main function
@@ -68,13 +71,13 @@ if __name__ == '__main__':
         res = p.map(process_snap, snaps)
 
     # convert to dataframe
-    df = pd.DataFrame(res, columns=['snapshot', 'slope_feh','slope_Zs','slope_Zg'])
+    df = pd.DataFrame(res, columns=['snapshot', 'slope_feh','slope_Zs','slope_Zg','slope_SFR'])
     df['snapshot'] = df['snapshot'].astype(np.int64)
     df.set_index('snapshot',inplace=True)
     df['slope_feh'] = df['slope_feh'].astype(np.float16)
     df['slope_Zs'] = df['slope_Zs'].astype(np.float16)
     df['slope_Zg'] = df['slope_Zg'].astype(np.float16)
-
+    df['slope_SFR'] = df['slope_SFR'].astype(np.float16)
     # get snapshot data
     time_df = pd.read_csv('../Data/Time_data.csv')
     time_df.columns = ['snapshot','redshift','LBT','dx']
