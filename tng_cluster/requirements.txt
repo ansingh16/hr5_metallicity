@@ -1,0 +1,7 @@
+numpy
+pandas
+h5py
+astropy
+requests
+matplotlib
+scipy

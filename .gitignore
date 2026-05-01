@@ -3,6 +3,15 @@
 # Learn more about .gitignore:
 #     https://www.atlassian.com/git/tutorials/saving-changes/gitignore
 
+Notes/
+presentation/
+
+tng_cluster/data/
+
+tng_cluster/*.hdf5
+tng_cluster/catalogs/
+tng_cluster/config.py
+
 # Node artifact files
 node_modules/
 dist/

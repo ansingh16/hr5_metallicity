@@ -1,0 +1,76 @@
+# =============================================================================
+# MNRAS style — for filaments_in_mdpl2
+# =============================================================================
+#
+# MNRAS column widths (used in scripts via figsize):
+#   Single column:  84 mm  =  3.321 in  (240 pt)
+#   Double column: 178 mm  =  7.014 in  (504 pt)
+#
+# Almost all paper figures are figure* (double-column).
+# One figure (fig_connectivity.png) is single-column.
+#
+# In-plot annotations (panel labels, stat boxes, etc.): use fontsize=8
+
+# ── Fonts ─────────────────────────────────────────────────────────────────────
+font.family         : STIXGeneral
+mathtext.fontset    : stix
+
+font.size           : 8
+axes.labelsize      : 8
+axes.titlesize      : 9
+xtick.labelsize     : 7
+ytick.labelsize     : 7
+legend.fontsize     : 7
+
+# ── Figure ────────────────────────────────────────────────────────────────────
+figure.figsize      : 7.014, 4.326
+figure.dpi          : 150
+figure.facecolor    : white
+
+# ── Saving ────────────────────────────────────────────────────────────────────
+savefig.dpi         : 300
+savefig.bbox        : tight
+savefig.facecolor   : white
+
+# ── Axes ──────────────────────────────────────────────────────────────────────
+axes.facecolor      : white
+axes.linewidth      : 0.6
+axes.labelpad       : 4.0
+axes.grid           : False
+
+axes.spines.top     : False
+axes.spines.right   : False
+
+# ── Ticks ─────────────────────────────────────────────────────────────────────
+xtick.direction     : in
+ytick.direction     : in
+
+xtick.major.size    : 3.0
+ytick.major.size    : 3.0
+xtick.minor.size    : 1.5
+ytick.minor.size    : 1.5
+
+xtick.major.width   : 0.6
+ytick.major.width   : 0.6
+xtick.minor.width   : 0.4
+ytick.minor.width   : 0.4
+
+xtick.top           : False
+ytick.right         : False
+
+# ── Lines ─────────────────────────────────────────────────────────────────────
+lines.linewidth     : 1.0
+lines.markersize    : 3.5
+
+# ── Legend ────────────────────────────────────────────────────────────────────
+legend.frameon      : False
+legend.borderpad    : 0.3
+legend.handlelength : 1.5
+legend.handletextpad: 0.4
+legend.labelspacing : 0.3
+
+# ── Colour cycle (Wong 2011 — colourblind-safe) ───────────────────────────────
+axes.prop_cycle : cycler(color=["#0072B2", "#D55E00", "#009E73", "#E69F00", "#56B4E9", "#CC79A7", "#F0E442"])
+
+# ── Error bars ────────────────────────────────────────────────────────────────
+errorbar.capsize    : 2.0
