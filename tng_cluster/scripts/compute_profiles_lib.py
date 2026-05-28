@@ -68,10 +68,63 @@ def compute_cn(metals_array):
     )
 
 
+def compute_sersic_index(coords_3d, masses, r_half):
+    """Compute Sérsic index from face-on projected stellar mass surface density."""
+    from scipy.optimize import curve_fit
+
+    coords = coords_3d - np.average(coords_3d, axis=0, weights=masses)
+
+    I = np.zeros((3, 3))
+    for i in range(3):
+        for j in range(3):
+            I[i, j] = np.sum(masses * coords[:, i] * coords[:, j])
+    eigvals, eigvecs = np.linalg.eigh(I)
+    minor_axis = eigvecs[:, 0]
+
+    proj = coords - np.outer(coords @ minor_axis, minor_axis)
+    R_proj = np.sqrt(proj[:, 0]**2 + proj[:, 1]**2 + proj[:, 2]**2)
+
+    n_ann = 20
+    r_min_ann = 0.05 * r_half
+    r_max_ann = 3.0 * r_half
+    if r_min_ann <= 0 or r_max_ann <= r_min_ann:
+        return np.nan
+
+    edges = np.logspace(np.log10(r_min_ann), np.log10(r_max_ann), n_ann + 1)
+    r_mid = np.sqrt(edges[:-1] * edges[1:])
+    sigma = np.zeros(n_ann)
+    for i in range(n_ann):
+        mask = (R_proj >= edges[i]) & (R_proj < edges[i + 1])
+        area = np.pi * (edges[i + 1]**2 - edges[i]**2)
+        if mask.sum() > 0 and area > 0:
+            sigma[i] = masses[mask].sum() / area
+
+    valid = sigma > 0
+    if valid.sum() < 5:
+        return np.nan
+
+    log_sigma = np.log10(sigma[valid])
+    r_fit = r_mid[valid]
+
+    def sersic_log(r, log_Ie, n, Re):
+        bn = 1.9992 * n - 0.3271
+        return log_Ie - (bn / np.log(10)) * ((r / Re)**(1.0 / n) - 1.0)
+
+    try:
+        p0 = [np.median(log_sigma), 2.5, r_half]
+        bounds = ([log_sigma.min() - 3, 0.3, 0.1 * r_half],
+                  [log_sigma.max() + 3, 10.0, 10.0 * r_half])
+        popt, _ = curve_fit(sersic_log, r_fit, log_sigma, p0=p0,
+                            bounds=bounds, maxfev=5000)
+        return popt[1]
+    except Exception:
+        return np.nan
+
+
 def radial_profile(values, weights, radii, r_half, n_bins, r_max_rhalf):
     r_norm = radii / r_half
-    bin_edges = np.linspace(0, r_max_rhalf, n_bins + 1)
-    bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+    bin_edges = np.logspace(np.log10(0.05), np.log10(r_max_rhalf), n_bins + 1)
+    bin_centers = np.sqrt(bin_edges[:-1] * bin_edges[1:])
 
     profile = np.full(n_bins, np.nan)
     profile_err = np.full(n_bins, np.nan)
@@ -116,7 +169,7 @@ def fit_gradient(bins, profile, r_min, r_max):
     return slope, intercept, slope_err
 
 
-def process_galaxy(filepath, subhalo_id, r_half_pkpc, z):
+def process_galaxy(filepath, subhalo_id, r_half_pkpc, z, subhalo_pos=None):
     a = 1.0 / (1.0 + z)
     age_universe = cosmo.age(z).to(u.Gyr).value
 
@@ -150,8 +203,11 @@ def process_galaxy(filepath, subhalo_id, r_half_pkpc, z):
         f.close()
         return None
 
-    com = np.average(coords, axis=0, weights=masses)
-    dx = coords - com
+    if subhalo_pos is not None:
+        center = np.array(subhalo_pos) * a / cfg.h
+    else:
+        center = np.average(coords, axis=0, weights=masses)
+    dx = coords - center
     radii = np.sqrt(np.sum(dx ** 2, axis=1))
 
     z_form = 1.0 / a_form - 1.0
@@ -231,7 +287,7 @@ def process_galaxy(filepath, subhalo_id, r_half_pkpc, z):
         g_metallicity = gas["GFM_Metallicity"][:]
         g_sfr = gas["StarFormationRate"][:]
 
-        g_dx = g_coords - com
+        g_dx = g_coords - center
         g_radii = np.sqrt(np.sum(g_dx ** 2, axis=1))
         g_feh = compute_feh(g_metals)
 

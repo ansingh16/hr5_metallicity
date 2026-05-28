@@ -32,13 +32,14 @@ from scripts.compute_profiles_lib import process_galaxy, fit_gradient
 
 
 def process_one(filepath, sub_id, r_half, z, halo_id, mstar,
-                vel_disp=np.nan, r_over_r200=np.nan, cluster_m200=np.nan):
+                vel_disp=np.nan, r_over_r200=np.nan, cluster_m200=np.nan,
+                subhalo_pos=None):
     """
     Process a single galaxy: compute profiles and fit gradients.
     Runs in a worker process. Returns (sub_id, result_dict, grad_row) or
     (sub_id, None, None) on failure.
     """
-    result = process_galaxy(filepath, sub_id, r_half, z)
+    result = process_galaxy(filepath, sub_id, r_half, z, subhalo_pos=subhalo_pos)
     if result is None:
         return sub_id, None, None
 
@@ -156,8 +157,10 @@ def main():
             dist = np.sqrt(np.sum((gal_pos_pkpc - ci["pos"]) ** 2))
             if ci["R200"] > 0:
                 r_over_r200 = dist / ci["R200"]
+        sub_pos = [row["pos_x"], row["pos_y"], row["pos_z"]]
         jobs.append((filepath, sub_id, row["R_half_pkpc"], z,
-                      halo_id, row["M_star_Msun"], vel_disp, r_over_r200, m200))
+                      halo_id, row["M_star_Msun"], vel_disp, r_over_r200, m200,
+                      sub_pos))
 
     print(f"Found {len(jobs)} HDF5 files (skipped {len(df) - len(jobs)} missing)\n")
 

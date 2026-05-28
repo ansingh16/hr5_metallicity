@@ -19,7 +19,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import config as cfg
-from scripts.api_utils import download_cutout
+from scripts.api_utils import download_cutout, download_cutout_safe
 
 
 # Fields to download for each particle type
@@ -66,8 +66,8 @@ def download_one(snap_num, subhalo_id, save_dir):
     }
 
     try:
-        filename = download_cutout(snap_num, subhalo_id, particle_fields,
-                                   save_dir=save_dir)
+        filename = download_cutout_safe(snap_num, subhalo_id, particle_fields,
+                                        save_dir=save_dir)
         # Rename to consistent name
         if filename != outpath:
             os.rename(filename, outpath)
@@ -86,8 +86,8 @@ def main():
                         help="Start index in catalog (for resuming)")
     parser.add_argument("--limit", type=int, default=None,
                         help="Max number of galaxies to download")
-    parser.add_argument("--workers", type=int, default=4,
-                        help="Parallel downloads (default: 4)")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="Parallel downloads (default: 1)")
     args = parser.parse_args()
 
     catdir = os.path.join(os.path.dirname(__file__), "..", cfg.CATALOG_DIR)
